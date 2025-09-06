@@ -7,6 +7,8 @@ from gspread_dataframe import set_with_dataframe, get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 
+creds_dict = json.loads(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
+
 st.title("Portfolio Tracker (Persistent)")
 
 # -------------------------------
