@@ -13,9 +13,18 @@ creds_dict = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
 credentials = service_account.Credentials.from_service_account_info(creds_dict)
 client = gspread.authorize(credentials)
 
-# Open your Google Sheet (change to your sheet name!)
-SHEET_NAME = "portfolio_data"
-sheet = client.open(SHEET_NAME).sheet1
+# ⚠️ Change this to the actual Google Spreadsheet name (file title in Drive)
+SPREADSHEET_TITLE = "PortfolioData"  
+TAB_NAME = "Sheet1"
+
+try:
+    sheet = client.open(SPREADSHEET_TITLE).worksheet(TAB_NAME)
+except Exception as e:
+    st.error("❌ Could not open Google Sheet. Check:\n"
+             "- The sheet is shared with your service account email\n"
+             "- The spreadsheet title matches exactly\n"
+             f"Error details: {e}")
+    st.stop()
 
 # -----------------------
 # Load portfolio data
