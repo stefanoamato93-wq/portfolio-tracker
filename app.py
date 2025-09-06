@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 
 st.title("Portfolio")
+st.subheader("Portfolio Total Value")
+st.metric("Total", f"${df['Value'].sum():,.2f}")
+
 
 # Example dummy data
 data = {
@@ -15,5 +18,3 @@ df["Value"] = df["Quantity"] * df["Price"]
 st.subheader("Holdings")
 st.dataframe(df)
 
-st.subheader("Portfolio Total Value")
-st.metric("Total", f"${df['Value'].sum():,.2f}")
