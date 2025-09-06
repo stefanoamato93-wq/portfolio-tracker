@@ -15,3 +15,6 @@ st.metric("Total", f"${df['Value'].sum():,.2f}")
 st.subheader("Holdings")
 st.dataframe(df)
 
+st.subheader("Portfolio Allocation")
+fig = px.pie(df, names="Instrument", values="Value", title="Allocation by Instrument")
+st.plotly_chart(fig)
