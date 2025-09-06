@@ -6,7 +6,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 
-st.title("Portfolio Tracker (Persistent)")
+st.title("Portfolio Tracker")
 
 # ---------------------------
 # Load Google Sheets credentials
