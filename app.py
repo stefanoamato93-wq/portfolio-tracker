@@ -8,6 +8,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 
 st.title("Portfolio Tracker (Persistent)")
+st.json(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
+
 
 # -------------------------------
 # Google Sheets setup using Streamlit Secrets
