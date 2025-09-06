@@ -1,96 +1,91 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import date
+from google.oauth2 import service_account
 import gspread
-from gspread_dataframe import set_with_dataframe, get_as_dataframe
-from oauth2client.service_account import ServiceAccountCredentials
-import json
 
-st.title("Portfolio Tracker (Persistent)")
-st.json(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
+st.set_page_config(page_title="Portfolio Tracker", layout="wide")
 
-
-# -------------------------------
-# Google Sheets setup using Streamlit Secrets
-# -------------------------------
-# Load service account JSON from Streamlit Secrets
+# -----------------------
+# Google Sheets connection
+# -----------------------
 creds_dict = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+credentials = service_account.Credentials.from_service_account_info(creds_dict)
+client = gspread.authorize(credentials)
 
-# Scope for Google Sheets API
-scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-client = gspread.authorize(creds)
+# Open your Google Sheet (change to your sheet name!)
+SHEET_NAME = "portfolio_data"
+sheet = client.open(SHEET_NAME).sheet1
 
-# Open the Google Sheet (make sure it exists and shared with service account)
-sheet = client.open("PortfolioTracker").worksheet("Holdings")
+# -----------------------
+# Load portfolio data
+# -----------------------
+@st.cache_data
+def load_data():
+    records = sheet.get_all_records()
+    return pd.DataFrame(records)
 
-# Load existing data into DataFrame
-try:
-    df = get_as_dataframe(sheet, evaluate_formulas=True).dropna(how='all')
-except:
-    df = pd.DataFrame(columns=["ISIN","Quantity","Price","Date"])
+if "portfolio" not in st.session_state:
+    st.session_state.portfolio = load_data()
 
-# -------------------------------
-# Show portfolio total and pie chart
-# -------------------------------
-if not df.empty:
-    df["Value"] = df["Quantity"] * df["Price"]
+st.title("📊 Portfolio Tracker (Persistent)")
 
-    # Total value
-    st.metric("Total Value", f"${df['Value'].sum():,.2f}")
+# -----------------------
+# Show current portfolio
+# -----------------------
+st.subheader("Current Holdings")
+st.dataframe(st.session_state.portfolio)
 
-    # Holdings table
-    st.subheader("Holdings")
-    st.dataframe(df)
-
-    # Pie chart for allocation
-    st.subheader("Portfolio Allocation")
-    fig = px.pie(df, names="ISIN", values="Value", title="Allocation by ISIN")
-    st.plotly_chart(fig)
-else:
-    st.info("No holdings yet.")
-
-# -------------------------------
-# Add holding form toggle
-# -------------------------------
+# -----------------------
+# Add a new holding (with toggle)
+# -----------------------
 if "show_form" not in st.session_state:
     st.session_state.show_form = False
 
-# Show form when user clicks "+ Add Holding"
-if st.button("+ Add Holding"):
-    st.session_state.show_form = True
-
-# -------------------------------
-# Add Holding Form
-# -------------------------------
-if st.session_state.show_form:
-    st.subheader("Add a new holding")
-
+if not st.session_state.show_form:
+    if st.button("➕ Add Holding"):
+        st.session_state.show_form = True
+else:
     with st.form("add_holding_form"):
         isin = st.text_input("ISIN")
         quantity = st.number_input("Amount of shares", min_value=0.0, value=0.0, step=1.0)
         price = st.number_input("Price of purchase (per share)", min_value=0.0, value=0.0, step=0.01)
         purchase_date = st.date_input("Date of purchase", value=date.today())
-        submitted = st.form_submit_button("Add to portfolio")
 
-    # Process submission
-    if submitted and isin and quantity > 0 and price > 0:
-        new_row = pd.DataFrame([{
-            "ISIN": isin,
-            "Quantity": quantity,
-            "Price": price,
-            "Date": str(purchase_date)
-        }])
-        df = pd.concat([df, new_row], ignore_index=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            submitted = st.form_submit_button("✅ Save")
+        with col2:
+            cancelled = st.form_submit_button("❌ Cancel")
 
-        # Save to Google Sheets
-        set_with_dataframe(sheet, df)
+        if submitted and isin and quantity > 0 and price > 0:
+            new_entry = {
+                "ISIN": isin,
+                "Quantity": quantity,
+                "Price": price,
+                "Date": str(purchase_date)
+            }
+            st.session_state.portfolio = pd.concat(
+                [st.session_state.portfolio, pd.DataFrame([new_entry])],
+                ignore_index=True
+            )
+            # Save to Google Sheets
+            sheet.append_row(list(new_entry.values()))
+            st.success("Added new holding!")
+            st.session_state.show_form = False
 
-        st.session_state.show_form = False
-        st.success("Holding added!")
+        if cancelled:
+            st.session_state.show_form = False
 
-    # Cancel button outside the form
-    if st.button("Cancel"):
-        st.session_state.show_form = False
-        st.info("Form canceled")
+# -----------------------
+# Pie chart of allocations
+# -----------------------
+if not st.session_state.portfolio.empty:
+    st.subheader("Portfolio Allocation")
+    chart_data = st.session_state.portfolio.groupby("ISIN")["Quantity"].sum()
+    st.plotly_chart(
+        {
+            "data": [{"labels": chart_data.index, "values": chart_data.values, "type": "pie"}],
+            "layout": {"title": "Holdings Distribution"},
+        }
+    )
