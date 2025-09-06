@@ -9,19 +9,30 @@ st.set_page_config(page_title="Portfolio Tracker", layout="wide")
 # -----------------------
 # Google Sheets connection
 # -----------------------
+# Secrets must contain a JSON service account (in .streamlit/secrets.toml)
 creds_dict = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
-credentials = service_account.Credentials.from_service_account_info(creds_dict)
+
+# ✅ Add Sheets + Drive scopes
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+credentials = service_account.Credentials.from_service_account_info(
+    creds_dict,
+    scopes=scopes
+)
 client = gspread.authorize(credentials)
 
-# ⚠️ Change this to the actual Google Spreadsheet name (file title in Drive)
-SPREADSHEET_TITLE = "PortfolioData"  
+# ⚠️ Use the exact Spreadsheet title (or better: replace with the Spreadsheet ID)
+SPREADSHEET_TITLE = "PortfolioData"   # Change this to your Google Sheet title
 TAB_NAME = "Sheet1"
 
 try:
     sheet = client.open(SPREADSHEET_TITLE).worksheet(TAB_NAME)
 except Exception as e:
     st.error("❌ Could not open Google Sheet. Check:\n"
-             "- The sheet is shared with your service account email\n"
+             "- The sheet is shared with your service account email (Editor access)\n"
              "- The spreadsheet title matches exactly\n"
              f"Error details: {e}")
     st.stop()
@@ -29,25 +40,22 @@ except Exception as e:
 # -----------------------
 # Load portfolio data
 # -----------------------
-@st.cache_data
-def load_data():
-    records = sheet.get_all_records()
-    return pd.DataFrame(records)
+def load_portfolio():
+    data = sheet.get_all_records()
+    return pd.DataFrame(data) if data else pd.DataFrame(columns=["ISIN", "Quantity", "Price", "Date"])
+
+def save_portfolio(df):
+    sheet.clear()
+    sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
 if "portfolio" not in st.session_state:
-    st.session_state.portfolio = load_data()
-
-st.title("📊 Portfolio Tracker (Persistent)")
+    st.session_state.portfolio = load_portfolio()
 
 # -----------------------
-# Show current portfolio
+# UI: Add Holding button
 # -----------------------
-st.subheader("Current Holdings")
-st.dataframe(st.session_state.portfolio)
+st.title("📊 Portfolio Tracker")
 
-# -----------------------
-# Add a new holding (with toggle)
-# -----------------------
 if "show_form" not in st.session_state:
     st.session_state.show_form = False
 
@@ -55,6 +63,7 @@ if not st.session_state.show_form:
     if st.button("➕ Add Holding"):
         st.session_state.show_form = True
 else:
+    st.subheader("Add a new holding")
     with st.form("add_holding_form"):
         isin = st.text_input("ISIN")
         quantity = st.number_input("Amount of shares", min_value=0.0, value=0.0, step=1.0)
@@ -62,39 +71,39 @@ else:
         purchase_date = st.date_input("Date of purchase", value=date.today())
 
         col1, col2 = st.columns(2)
-        with col1:
-            submitted = st.form_submit_button("✅ Save")
-        with col2:
-            cancelled = st.form_submit_button("❌ Cancel")
+        submitted = col1.form_submit_button("✅ Save")
+        cancelled = col2.form_submit_button("❌ Cancel")
 
         if submitted and isin and quantity > 0 and price > 0:
-            new_entry = {
-                "ISIN": isin,
-                "Quantity": quantity,
-                "Price": price,
-                "Date": str(purchase_date)
-            }
-            st.session_state.portfolio = pd.concat(
-                [st.session_state.portfolio, pd.DataFrame([new_entry])],
-                ignore_index=True
-            )
-            # Save to Google Sheets
-            sheet.append_row(list(new_entry.values()))
-            st.success("Added new holding!")
+            st.session_state.portfolio = pd.concat([
+                st.session_state.portfolio,
+                pd.DataFrame([{
+                    "ISIN": isin,
+                    "Quantity": quantity,
+                    "Price": price,
+                    "Date": str(purchase_date)
+                }])
+            ], ignore_index=True)
+
+            save_portfolio(st.session_state.portfolio)
+            st.success("✅ Holding added")
             st.session_state.show_form = False
+            st.experimental_rerun()
 
         if cancelled:
             st.session_state.show_form = False
+            st.experimental_rerun()
 
 # -----------------------
-# Pie chart of allocations
+# Display portfolio
 # -----------------------
 if not st.session_state.portfolio.empty:
-    st.subheader("Portfolio Allocation")
-    chart_data = st.session_state.portfolio.groupby("ISIN")["Quantity"].sum()
-    st.plotly_chart(
-        {
-            "data": [{"labels": chart_data.index, "values": chart_data.values, "type": "pie"}],
-            "layout": {"title": "Holdings Distribution"},
-        }
-    )
+    st.subheader("📑 Current Portfolio")
+    st.dataframe(st.session_state.portfolio)
+
+    # Example pie chart by ISIN
+    st.subheader("📈 Portfolio Breakdown")
+    fig = st.session_state.portfolio.groupby("ISIN")["Quantity"].sum().plot.pie(autopct="%1.1f%%").get_figure()
+    st.pyplot(fig)
+else:
+    st.info("No holdings yet. Click ➕ Add Holding to start.")
