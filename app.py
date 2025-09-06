@@ -40,9 +40,10 @@ if st.session_state.show_form:
                 "Price": price,
                 "Date": purchase_date
             })
-            if canceled:
+        if canceled:
             st.session_state.show_form = False  # Hide form without adding
             st.info("Form canceled")
+            
             # Hide form after submission
             st.session_state.show_form = False
 
