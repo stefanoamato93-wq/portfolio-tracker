@@ -15,7 +15,7 @@ st.json(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
 # Google Sheets setup using Streamlit Secrets
 # -------------------------------
 # Load service account JSON from Streamlit Secrets
-creds_dict = json.loads(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
+creds_dict = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
 
 # Scope for Google Sheets API
 scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
