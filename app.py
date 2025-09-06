@@ -36,7 +36,6 @@ if st.session_state.show_form:
     # Cancel button outside the form
     if st.button("Cancel"):
         st.session_state.show_form = False
-        st.info("Form canceled")
     
     # Process submission
     if submitted and isin and quantity > 0 and price > 0:
