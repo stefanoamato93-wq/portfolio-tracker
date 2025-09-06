@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.title("My First Portfolio Tracker")
+st.title("Portfolio")
 
 # Example dummy data
 data = {
