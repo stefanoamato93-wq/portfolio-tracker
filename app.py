@@ -5,7 +5,9 @@ from datetime import date
 
 st.title("Portfolio Tracker")
 
-
+# Initialize portfolio and form visibility in session state
+if "portfolio" not in st.session_state:
+    st.session_state.portfolio = []
 
 if "show_form" not in st.session_state:
     st.session_state.show_form = False
