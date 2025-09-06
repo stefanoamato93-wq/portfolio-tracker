@@ -29,6 +29,8 @@ if st.session_state.show_form:
         price = st.number_input("Price of purchase (per share)", min_value=0.0, value=0.0, step=0.01)
         purchase_date = st.date_input("Date of purchase", value=date.today())
         submitted = st.form_submit_button("Add to portfolio")
+        canceled = st.form_submit_button("Cancel")
+
 
         if submitted and isin and quantity > 0 and price > 0:
             # Add entry to session state
@@ -38,6 +40,9 @@ if st.session_state.show_form:
                 "Price": price,
                 "Date": purchase_date
             })
+            if canceled:
+            st.session_state.show_form = False  # Hide form without adding
+            st.info("Form canceled")
             # Hide form after submission
             st.session_state.show_form = False
 
