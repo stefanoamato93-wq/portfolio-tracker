@@ -9,25 +9,6 @@ st.title("Portfolio Tracker")
 if "portfolio" not in st.session_state:
     st.session_state["portfolio"] = []
 
-# -----------------------
-# User input form
-# -----------------------
-st.subheader("Add a new holding")
-with st.form("add_holding_form"):
-    isin = st.text_input("ISIN")
-    quantity = st.number_input("Amount of shares", min_value=0.0, value=0.0, step=1.0)
-    price = st.number_input("Price of purchase (per share)", min_value=0.0, value=0.0, step=0.01)
-    purchase_date = st.date_input("Date of purchase", value=date.today())
-    submitted = st.form_submit_button("Add to portfolio")
-
-    if submitted and isin and quantity > 0 and price > 0:
-        # Add entry to session state
-        st.session_state.portfolio.append({
-            "ISIN": isin,
-            "Quantity": quantity,
-            "Price": price,
-            "Date": purchase_date
-        })
 
 # -----------------------
 # Build DataFrame
@@ -49,3 +30,22 @@ if st.session_state.portfolio:
     st.plotly_chart(fig)
 else:
     st.info("Add holdings above to see your portfolio.")
+# -----------------------
+# User input form
+# -----------------------
+st.subheader("Add a new holding")
+with st.form("add_holding_form"):
+    isin = st.text_input("ISIN")
+    quantity = st.number_input("Amount of shares", min_value=0.0, value=0.0, step=1.0)
+    price = st.number_input("Price of purchase (per share)", min_value=0.0, value=0.0, step=0.01)
+    purchase_date = st.date_input("Date of purchase", value=date.today())
+    submitted = st.form_submit_button("Add to portfolio")
+
+    if submitted and isin and quantity > 0 and price > 0:
+        # Add entry to session state
+        st.session_state.portfolio.append({
+            "ISIN": isin,
+            "Quantity": quantity,
+            "Price": price,
+            "Date": purchase_date
+        })
