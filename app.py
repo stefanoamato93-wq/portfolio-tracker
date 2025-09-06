@@ -23,29 +23,29 @@ if st.button("+ Add Holding"):
 # -----------------------
 if st.session_state.show_form:
     st.subheader("Add a new holding")
-    
-    # Add a container for the form
+
+    # Form for Add button
     with st.form("add_holding_form"):
         isin = st.text_input("ISIN")
         quantity = st.number_input("Amount of shares", min_value=0.0, value=0.0, step=1.0)
         price = st.number_input("Price of purchase (per share)", min_value=0.0, value=0.0, step=0.01)
         purchase_date = st.date_input("Date of purchase", value=date.today())
-        
         submitted = st.form_submit_button("Add to portfolio")
-    
+
+        if submitted and isin and quantity > 0 and price > 0:
+            st.session_state.portfolio.append({
+                "ISIN": isin,
+                "Quantity": quantity,
+                "Price": price,
+                "Date": purchase_date
+            })
+            st.session_state.show_form = False  # hide form immediately after adding
+
     # Cancel button outside the form
     if st.button("Cancel"):
         st.session_state.show_form = False
-    
-    # Process submission
-    if submitted and isin and quantity > 0 and price > 0:
-        st.session_state.portfolio.append({
-            "ISIN": isin,
-            "Quantity": quantity,
-            "Price": price,
-            "Date": purchase_date
-        })
-        st.session_state.show_form = False
+        st.info("Form canceled")
+
 
 # -----------------------
 # Build DataFrame and display
