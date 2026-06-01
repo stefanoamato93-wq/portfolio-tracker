@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Expense Tracker</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #f2f2f7; --card: #fff; --primary: #007aff; --danger: #ff3b30;
+  --success: #34c759; --text: #1c1c1e; --secondary: #8e8e93;
+  --border: #c6c6c8; --input-bg: #e5e5ea; --radius: 12px;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100dvh;
+  padding: 0 0 env(safe-area-inset-bottom);
+}
+</style>
+<style>
+.header {
+  background: var(--card); padding: 16px 20px; border-bottom: 0.5px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; z-index: 100;
+}
+.header h1 { font-size: 17px; font-weight: 600; }
+.header button {
+  background: none; border: none; color: var(--primary); font-size: 15px;
+  font-weight: 500; cursor: pointer; padding: 8px;
+}
+.container { padding: 16px; max-width: 500px; margin: 0 auto; }
+.card {
+  background: var(--card); border-radius: var(--radius); padding: 16px;
+  margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.field-label {
+  font-size: 13px; font-weight: 500; color: var(--secondary);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+}
+/* Combo input: searchable select + free text */
+.combo-input {
+  position: relative; width: 100%;
+}
+.combo-input input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: 10px; font-size: 16px; background: var(--input-bg);
+  outline: none; transition: border-color 0.2s;
+}
+.combo-input input:focus { border-color: var(--primary); background: #fff; }
+.combo-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; margin-top: 4px; max-height: 200px;
+  overflow-y: auto; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.combo-dropdown.show { display: block; }
+.combo-option {
+  padding: 12px 14px; font-size: 15px; cursor: pointer;
+  border-bottom: 0.5px solid var(--border);
+}
+.combo-option:last-child { border-bottom: none; }
+.combo-option:active, .combo-option.highlighted { background: #e8f0fe; }
+.combo-option .freq {
+  float: right; font-size: 12px; color: var(--secondary);
+}
+/* Roll picker */
+.roll-container {
+  display: flex; align-items: center; gap: 12px;
+}
+.roll-wrapper {
+  flex: 1; height: 150px; overflow: hidden; position: relative;
+  border-radius: 10px; background: var(--input-bg);
+  touch-action: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%);
+}
+.roll-track {
+  transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.roll-item {
+  height: 50px; display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 500; color: var(--secondary);
+  user-select: none; -webkit-user-select: none;
+}
+.roll-item.selected { color: var(--text); font-size: 28px; font-weight: 700; }
+.roll-highlight {
+  position: absolute; top: 50px; left: 8px; right: 8px; height: 50px;
+  border-radius: 8px; background: rgba(0,122,255,0.08);
+  border: 1.5px solid rgba(0,122,255,0.3); pointer-events: none;
+}
+.roll-sign-btn {
+  width: 44px; height: 44px; border-radius: 22px; border: none;
+  background: var(--input-bg); font-size: 22px; font-weight: 700;
+  color: var(--text); cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+}
+.roll-sign-btn.negative { background: #ffe5e5; color: var(--danger); }
+.roll-manual input {
+  width: 100%; margin-top: 8px; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 10px; font-size: 16px; text-align: center; background: var(--input-bg);
+}
+.roll-manual input:focus { border-color: var(--primary); background: #fff; outline: none; }
+/* Buttons */
+.btn {
+  width: 100%; padding: 14px; border: none; border-radius: 12px;
+  font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+}
+.btn:active { opacity: 0.7; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; margin-top: 8px; }
+.btn-secondary { background: var(--input-bg); color: var(--text); margin-top: 8px; }
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+  background: #333; color: #fff; padding: 12px 24px; border-radius: 20px;
+  font-size: 14px; font-weight: 500; z-index: 1000; opacity: 0;
+  transition: opacity 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* Recent entries */
+.recent-entry {
+  padding: 12px 0; border-bottom: 0.5px solid var(--border); cursor: pointer;
+}
+.recent-entry:last-child { border-bottom: none; }
+.recent-entry .re-top { display: flex; justify-content: space-between; align-items: center; }
+.recent-entry .re-value { font-size: 18px; font-weight: 700; }
+.recent-entry .re-value.positive { color: var(--success); }
+.recent-entry .re-value.negative { color: var(--danger); }
+.recent-entry .re-details { font-size: 13px; color: var(--secondary); margin-top: 2px; }
+.recent-entry .re-time { font-size: 12px; color: var(--secondary); }
+
+/* Views */
+.view { display: none; }
+.view.active { display: block; }
+
+/* Loading */
+.spinner {
+  width: 24px; height: 24px; border: 3px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 20px auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Conditional field */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <button id="btnRecent">History</button>
+  <h1>Expense Tracker</h1>
+  <button id="btnNew">+ New</button>
+</div>
+
+<!-- FORM VIEW -->
+<div id="viewForm" class="view active">
+<div class="container">
+
+  <!-- Account (-) -->
+  <div class="card">
+    <div class="field-label">Account (−)</div>
+    <div class="combo-input" id="comboAccountMinus">
+      <input type="text" placeholder="Select or type account..." autocomplete="off">
+      <div class="combo-dropdown"></div>
+    </div>
+  </div>
+
+  <!-- Value -->
+  <div class="card">
+    <div class="field-label">Value</div>
+    <div class="roll-container">
+      <button class="roll-sign-btn negative" id="rollSign">−</button>
+      <div class="roll-wrapper" id="rollWrapper">
+        <div class="roll-highlight"></div>
+        <div class="roll-track" id="rollTrack"></div>
+      </div>
+    </div>
+    <div class="roll-manual">
+      <input type="number" id="manualValue" placeholder="Or type value manually...">
+    </div>
+  </div>
+
+  <!-- Label -->
+  <div class="card">
+    <div class="field-label">Label</div>
+    <div class="combo-input" id="comboLabel">
+      <input type="text" placeholder="Select or type label..." autocomplete="off">
+      <div class="combo-dropdown"></div>
+    </div>
+  </div>
+
+  <!-- Details -->
+  <div class="card">
+    <div class="field-label">Details</div>
+    <div class="combo-input" id="comboDetails">
+      <input type="text" placeholder="Select or type details..." autocomplete="off">
+      <div class="combo-dropdown"></div>
+    </div>
+  </div>
+
+  <!-- Account (+) — only visible when Label = Transfer -->
+  <div class="card hidden" id="cardAccountPlus">
+    <div class="field-label">Account (+)</div>
+    <div class="combo-input" id="comboAccountPlus">
+      <input type="text" placeholder="Transfer to account..." autocomplete="off">
+      <div class="combo-dropdown"></div>
+    </div>
+  </div>
+
+  <!-- Assetclassdetails -->
+  <div class="card">
+    <div class="field-label">Asset Class Details</div>
+    <div class="combo-input" id="comboAssetclass">
+      <input type="text" placeholder="Optional..." autocomplete="off">
+      <div class="combo-dropdown"></div>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <div class="card">
+    <button class="btn btn-primary" id="btnSubmit">Submit</button>
+    <button class="btn btn-danger hidden" id="btnDelete">Delete</button>
+    <button class="btn btn-secondary hidden" id="btnCancel">Cancel Edit</button>
+  </div>
+
+</div>
+</div>
+
+<!-- HISTORY VIEW -->
+<div id="viewHistory" class="view">
+<div class="container">
+  <div class="card">
+    <div class="field-label">Recent Entries</div>
+    <div id="recentList"><div class="spinner"></div></div>
+  </div>
+</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// CONFIG — paste your Apps Script deployment URL here
+// ============================================================
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcJZvIahv2NbAKHW5ub7Rr-dkEBTAu1Zl3-G_FsvXQYIZc7RsoIvZrfTITVGxNOyM97w/exec';
+
+// ============================================================
+// STATE
+// ============================================================
+let suggestions = { accountMinus: [], label: [], details: [], accountPlus: [], assetclassdetails: [] };
+let editingRow = null; // null = new entry, number = row being edited
+let rollValue = 0;
+let rollSign = -1; // -1 or +1
+let isNegative = true;
+
+// ============================================================
+// ROLL PICKER
+// ============================================================
+const ROLL_MIN = 0;
+const ROLL_MAX = 500;
+const ROLL_STEP = 1;
+const ITEM_HEIGHT = 50;
+
+let rollItems = [];
+let currentIndex = 0;
+let touchStartY = 0;
+let touchCurrentY = 0;
+let trackOffset = 0;
+let isDragging = false;
+let velocity = 0;
+let lastTouchY = 0;
+let lastTouchTime = 0;
+
+function buildRoll() {
+  const track = document.getElementById('rollTrack');
+  track.innerHTML = '';
+  rollItems = [];
+  for (let i = ROLL_MIN; i <= ROLL_MAX; i += ROLL_STEP) {
+    rollItems.push(i);
+    const div = document.createElement('div');
+    div.className = 'roll-item';
+    div.textContent = i;
+    track.appendChild(div);
+  }
+  setRollIndex(0);
+}
+
+function setRollIndex(idx) {
+  idx = Math.max(0, Math.min(rollItems.length - 1, idx));
+  currentIndex = idx;
+  rollValue = rollItems[idx];
+  const track = document.getElementById('rollTrack');
+  trackOffset = -idx * ITEM_HEIGHT;
+  track.style.transform = `translateY(${trackOffset + ITEM_HEIGHT}px)`;
+  // Update selected styling
+  const items = track.children;
+  for (let i = 0; i < items.length; i++) {
+    items[i].classList.toggle('selected', i === idx);
+  }
+  // Sync manual input
+  document.getElementById('manualValue').value = getSignedValue();
+}
+
+function getSignedValue() {
+  return isNegative ? -rollValue : rollValue;
+}
+
+function initRollTouch() {
+  const wrapper = document.getElementById('rollWrapper');
+
+  wrapper.addEventListener('touchstart', (e) => {
+    isDragging = true;
+    touchStartY = e.touches[0].clientY;
+    lastTouchY = touchStartY;
+    lastTouchTime = Date.now();
+    velocity = 0;
+    const track = document.getElementById('rollTrack');
+    track.style.transition = 'none';
+  }, { passive: false });
+
+  wrapper.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault(); // prevent page scroll while using roll picker
+    const y = e.touches[0].clientY;
+    const now = Date.now();
+    const dt = now - lastTouchTime;
+    if (dt > 0) velocity = (y - lastTouchY) / dt;
+    lastTouchY = y;
+    lastTouchTime = now;
+    const delta = y - touchStartY;
+    const track = document.getElementById('rollTrack');
+    const baseOffset = -currentIndex * ITEM_HEIGHT + ITEM_HEIGHT;
+    track.style.transform = `translateY(${baseOffset + delta}px)`;
+  }, { passive: false });
+
+  wrapper.addEventListener('touchend', () => {
+    isDragging = false;
+    const track = document.getElementById('rollTrack');
+    track.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';
+    const delta = lastTouchY - touchStartY;
+    // Apply momentum
+    const momentum = velocity * 150;
+    const totalDelta = delta + momentum;
+    const indexDelta = Math.round(-totalDelta / ITEM_HEIGHT);
+    setRollIndex(currentIndex + indexDelta);
+  });
+
+  // Mouse support for desktop testing
+  wrapper.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const dir = e.deltaY > 0 ? 1 : -1;
+    setRollIndex(currentIndex + dir);
+  }, { passive: false });
+}
+
+// Sign toggle
+document.getElementById('rollSign').addEventListener('click', () => {
+  isNegative = !isNegative;
+  const btn = document.getElementById('rollSign');
+  btn.textContent = isNegative ? '−' : '+';
+  btn.classList.toggle('negative', isNegative);
+  document.getElementById('manualValue').value = getSignedValue();
+});
+
+// Manual value input sync
+document.getElementById('manualValue').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value);
+  if (!isNaN(val)) {
+    isNegative = val < 0;
+    const absVal = Math.abs(val);
+    const btn = document.getElementById('rollSign');
+    btn.textContent = isNegative ? '−' : '+';
+    btn.classList.toggle('negative', isNegative);
+    // Find closest roll index
+    const idx = Math.round((absVal - ROLL_MIN) / ROLL_STEP);
+    if (idx >= 0 && idx < rollItems.length) {
+      const track = document.getElementById('rollTrack');
+      track.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';
+      currentIndex = idx;
+      rollValue = rollItems[idx];
+      trackOffset = -idx * ITEM_HEIGHT;
+      track.style.transform = `translateY(${trackOffset + ITEM_HEIGHT}px)`;
+      const items = track.children;
+      for (let i = 0; i < items.length; i++) {
+        items[i].classList.toggle('selected', i === idx);
+      }
+    } else {
+      // Value beyond roll range — just keep manual
+      rollValue = absVal;
+    }
+  }
+});
+
+// ============================================================
+// COMBO INPUT (searchable select + free text)
+// ============================================================
+function initCombo(containerId, suggestionsKey) {
+  const container = document.getElementById(containerId);
+  const input = container.querySelector('input');
+  const dropdown = container.querySelector('.combo-dropdown');
+
+  function render(filter) {
+    const list = suggestions[suggestionsKey] || [];
+    const filtered = filter
+      ? list.filter(s => s.toLowerCase().includes(filter.toLowerCase()))
+      : list;
+    dropdown.innerHTML = '';
+    filtered.slice(0, 15).forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'combo-option';
+      div.textContent = item;
+      div.addEventListener('click', () => {
+        input.value = item;
+        dropdown.classList.remove('show');
+        input.dispatchEvent(new Event('change'));
+      });
+      dropdown.appendChild(div);
+    });
+    dropdown.classList.toggle('show', filtered.length > 0);
+  }
+
+  input.addEventListener('focus', () => render(input.value));
+  input.addEventListener('input', () => render(input.value));
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!container.contains(e.target)) dropdown.classList.remove('show');
+  });
+}
+
+// ============================================================
+// LABEL CHANGE — show/hide Account (+)
+// ============================================================
+function watchLabelForTransfer() {
+  const labelInput = document.querySelector('#comboLabel input');
+  const cardPlus = document.getElementById('cardAccountPlus');
+
+  function check() {
+    const val = labelInput.value.trim().toLowerCase();
+    if (val === 'transfer') {
+      cardPlus.classList.remove('hidden');
+    } else {
+      cardPlus.classList.add('hidden');
+    }
+  }
+  labelInput.addEventListener('input', check);
+  labelInput.addEventListener('change', check);
+}
+
+// ============================================================
+// API CALLS
+// ============================================================
+async function apiCall(data) {
+  const resp = await fetch(SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // Apps Script quirk
+    body: JSON.stringify(data)
+  });
+  return await resp.json();
+}
+
+async function loadSuggestions() {
+  try {
+    const result = await apiCall({ action: 'getSuggestions' });
+    if (result.success) suggestions = result.suggestions;
+  } catch (e) {
+    console.warn('Could not load suggestions:', e);
+  }
+}
+
+async function loadRecent() {
+  try {
+    const result = await apiCall({ action: 'getRecent', count: 20 });
+    if (result.success) renderRecent(result.rows);
+  } catch (e) {
+    document.getElementById('recentList').innerHTML = '<p>Failed to load.</p>';
+  }
+}
+
+// ============================================================
+// SUBMIT / UPDATE
+// ============================================================
+async function handleSubmit() {
+  const accountMinus = document.querySelector('#comboAccountMinus input').value.trim();
+  const label = document.querySelector('#comboLabel input').value.trim();
+  const details = document.querySelector('#comboDetails input').value.trim();
+  const accountPlus = document.querySelector('#comboAccountPlus input').value.trim();
+  const assetclass = document.querySelector('#comboAssetclass input').value.trim();
+
+  // Get value from manual input (it's always synced)
+  const manualVal = document.getElementById('manualValue').value;
+  const value = manualVal !== '' ? parseInt(manualVal) : getSignedValue();
+
+  // Validation
+  if (!accountMinus) { showToast('Account (−) is required'); return; }
+  if (value === 0 && manualVal === '') { showToast('Value is required'); return; }
+  if (!label) { showToast('Label is required'); return; }
+  if (!details) { showToast('Details is required'); return; }
+
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.textContent = editingRow ? 'Updating...' : 'Submitting...';
+
+  const payload = {
+    action: editingRow ? 'update' : 'submit',
+    timestamp: editingRow ? editingRow.timestamp : new Date().toLocaleString(),
+    accountMinus,
+    value,
+    label,
+    details,
+    accountPlus: label.toLowerCase() === 'transfer' ? accountPlus : '',
+    assetclassdetails: assetclass
+  };
+  if (editingRow) payload.rowIndex = editingRow.rowIndex;
+
+  try {
+    const result = await apiCall(payload);
+    if (result.success) {
+      showToast(editingRow ? 'Updated!' : 'Saved!');
+      resetForm();
+      loadSuggestions(); // refresh suggestions
+    } else {
+      showToast('Error: ' + (result.error || 'Unknown'));
+    }
+  } catch (e) {
+    showToast('Network error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Submit';
+}
+
+// ============================================================
+// FORM HELPERS
+// ============================================================
+function resetForm() {
+  document.querySelector('#comboAccountMinus input').value = '';
+  document.querySelector('#comboLabel input').value = '';
+  document.querySelector('#comboDetails input').value = '';
+  document.querySelector('#comboAccountPlus input').value = '';
+  document.querySelector('#comboAssetclass input').value = '';
+  document.getElementById('manualValue').value = '';
+  document.getElementById('cardAccountPlus').classList.add('hidden');
+  setRollIndex(0);
+  isNegative = true;
+  const btn = document.getElementById('rollSign');
+  btn.textContent = '−';
+  btn.classList.add('negative');
+  editingRow = null;
+  document.getElementById('btnSubmit').textContent = 'Submit';
+  document.getElementById('btnDelete').classList.add('hidden');
+  document.getElementById('btnCancel').classList.add('hidden');
+}
+
+function populateForm(row) {
+  editingRow = row;
+  document.querySelector('#comboAccountMinus input').value = row.accountMinus || '';
+  document.querySelector('#comboLabel input').value = row.label || '';
+  document.querySelector('#comboDetails input').value = row.details || '';
+  document.querySelector('#comboAccountPlus input').value = row.accountPlus || '';
+  document.querySelector('#comboAssetclass input').value = row.assetclassdetails || '';
+
+  // Value
+  const val = parseInt(row.value) || 0;
+  isNegative = val < 0;
+  const absVal = Math.abs(val);
+  const signBtn = document.getElementById('rollSign');
+  signBtn.textContent = isNegative ? '−' : '+';
+  signBtn.classList.toggle('negative', isNegative);
+  document.getElementById('manualValue').value = val;
+
+  const idx = Math.round((absVal - ROLL_MIN) / ROLL_STEP);
+  if (idx >= 0 && idx < rollItems.length) {
+    const track = document.getElementById('rollTrack');
+    track.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';
+    setRollIndex(idx);
+  } else {
+    rollValue = absVal;
+  }
+
+  // Show Account (+) if Transfer
+  if ((row.label || '').toLowerCase() === 'transfer') {
+    document.getElementById('cardAccountPlus').classList.remove('hidden');
+  }
+
+  document.getElementById('btnSubmit').textContent = 'Update';
+  document.getElementById('btnCancel').classList.remove('hidden');
+  showView('viewForm');
+}
+
+// ============================================================
+// RECENT ENTRIES
+// ============================================================
+function renderRecent(rows) {
+  const list = document.getElementById('recentList');
+  if (!rows || rows.length === 0) {
+    list.innerHTML = '<p style="color:var(--secondary);font-size:14px;">No entries yet.</p>';
+    return;
+  }
+  list.innerHTML = '';
+  rows.forEach(row => {
+    const div = document.createElement('div');
+    div.className = 'recent-entry';
+    const val = parseInt(row.value) || 0;
+    const valClass = val >= 0 ? 'positive' : 'negative';
+    const valStr = val >= 0 ? `+${val}` : `${val}`;
+    div.innerHTML = `
+      <div class="re-top">
+        <span class="re-value ${valClass}">${valStr}</span>
+        <span class="re-time">${row.timestamp}</span>
+      </div>
+      <div class="re-details">${row.accountMinus} → ${row.label} · ${row.details}</div>
+    `;
+    div.addEventListener('click', () => populateForm(row));
+    list.appendChild(div);
+  });
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+document.getElementById('btnRecent').addEventListener('click', () => {
+  showView('viewHistory');
+  loadRecent();
+});
+document.getElementById('btnNew').addEventListener('click', () => {
+  resetForm();
+  showView('viewForm');
+});
+document.getElementById('btnSubmit').addEventListener('click', handleSubmit);
+document.getElementById('btnCancel').addEventListener('click', () => {
+  resetForm();
+});
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', async () => {
+  buildRoll();
+  initRollTouch();
+  initCombo('comboAccountMinus', 'accountMinus');
+  initCombo('comboLabel', 'label');
+  initCombo('comboDetails', 'details');
+  initCombo('comboAccountPlus', 'accountPlus');
+  initCombo('comboAssetclass', 'assetclassdetails');
+  watchLabelForTransfer();
+  await loadSuggestions();
+});
+</script>
+</body>
+</html>
