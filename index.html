@@ -156,7 +156,7 @@ body {
 <!-- HEADER -->
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v2</h1>
+  <h1>Expense Tracker v3</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -266,8 +266,8 @@ let isNegative = true;
 // ROLL PICKER
 // ============================================================
 const ROLL_MIN = 0;
-const ROLL_MAX = 500;
-const ROLL_STEP = 1;
+const ROLL_MAX = 5000;
+const ROLL_STEP = 5;
 const ITEM_HEIGHT = 50;
 
 let rollItems = [];
@@ -345,10 +345,12 @@ function initRollTouch() {
   wrapper.addEventListener('touchend', () => {
     isDragging = false;
     const track = document.getElementById('rollTrack');
-    track.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';
+    track.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
     const delta = lastTouchY - touchStartY;
-    // Apply momentum
-    const momentum = velocity * 150;
+    // Apply momentum — scale with velocity for faster flicks
+    const speed = Math.abs(velocity);
+    const momentumFactor = speed > 1.5 ? 400 : speed > 0.8 ? 250 : 150;
+    const momentum = velocity * momentumFactor;
     const totalDelta = delta + momentum;
     const indexDelta = Math.round(-totalDelta / ITEM_HEIGHT);
     setRollIndex(currentIndex + indexDelta);
@@ -380,7 +382,7 @@ document.getElementById('manualValue').addEventListener('input', (e) => {
     const btn = document.getElementById('rollSign');
     btn.textContent = isNegative ? '−' : '+';
     btn.classList.toggle('negative', isNegative);
-    // Find closest roll index
+    // Find closest roll index — snap to nearest step
     const idx = Math.round((absVal - ROLL_MIN) / ROLL_STEP);
     if (idx >= 0 && idx < rollItems.length) {
       const track = document.getElementById('rollTrack');
@@ -394,8 +396,18 @@ document.getElementById('manualValue').addEventListener('input', (e) => {
         items[i].classList.toggle('selected', i === idx);
       }
     } else {
-      // Value beyond roll range — just keep manual
+      // Value beyond roll range — keep manual value, move roll to max
       rollValue = absVal;
+      const maxIdx = rollItems.length - 1;
+      const track = document.getElementById('rollTrack');
+      track.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';
+      currentIndex = maxIdx;
+      trackOffset = -maxIdx * ITEM_HEIGHT;
+      track.style.transform = `translateY(${trackOffset + ITEM_HEIGHT}px)`;
+      const items = track.children;
+      for (let i = 0; i < items.length; i++) {
+        items[i].classList.toggle('selected', i === maxIdx);
+      }
     }
   }
 });
@@ -671,4 +683,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 </script>
 </body>
 </html>
-// ============================================================
