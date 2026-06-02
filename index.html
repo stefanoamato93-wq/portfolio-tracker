@@ -50,10 +50,10 @@ body {
 .text-roll-track { transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1); }
 .text-roll-item {
   height: 50px; display: flex; align-items: center; justify-content: center;
-  font-size: 15px; font-weight: 500; color: var(--secondary);
+  font-size: 15px; font-weight: 500; color: #555;
   user-select: none; -webkit-user-select: none; padding: 0 8px; text-align: center;
 }
-.text-roll-item.selected { color: var(--text); font-size: 17px; font-weight: 700; }
+.text-roll-item.selected { color: #000; font-size: 17px; font-weight: 700; }
 .text-roll-highlight {
   position: absolute; top: 50px; left: 8px; right: 8px; height: 50px;
   border-radius: 8px; background: rgba(0,122,255,0.08);
@@ -78,10 +78,10 @@ body {
 .num-roll-track { transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1); }
 .num-roll-item {
   height: 50px; display: flex; align-items: center; justify-content: center;
-  font-size: 24px; font-weight: 500; color: var(--secondary);
+  font-size: 24px; font-weight: 500; color: #555;
   user-select: none; -webkit-user-select: none;
 }
-.num-roll-item.selected { color: var(--text); font-size: 28px; font-weight: 700; }
+.num-roll-item.selected { color: #000; font-size: 28px; font-weight: 700; }
 .num-roll-highlight {
   position: absolute; top: 50px; left: 8px; right: 8px; height: 50px;
   border-radius: 8px; background: rgba(0,122,255,0.08);
@@ -144,7 +144,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v6</h1>
+  <h1>Expense Tracker v7</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -723,8 +723,9 @@ document.addEventListener('DOMContentLoaded', () => {
   rollAccountMinus = new TextRoll('rollAccountMinus', LISTS.accountMinus, 'freeAccountMinus');
   rollLabelInstance = new TextRoll('rollLabel', LISTS.label, 'freeLabel');
   rollDetails = new TextRoll('rollDetails', LISTS.details, 'freeDetails');
-  rollAccountPlusInstance = new TextRoll('rollAccountPlus', LISTS.accountPlus, 'freeAccountPlus');
   rollAssetclass = new TextRoll('rollAssetclass', LISTS.assetclass, 'freeAssetclass');
+  // Account+ is in a hidden div but still needs to be initialized
+  rollAccountPlusInstance = new TextRoll('rollAccountPlus', LISTS.accountPlus, 'freeAccountPlus');
   buildNumRoll();
   initNumRollTouch();
   watchLabel();
