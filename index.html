@@ -144,7 +144,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v9</h1>
+  <h1>Expense Tracker v11</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -196,7 +196,7 @@ body {
   </div>
 
   <!-- Account (+) — only visible when Label = Transfer -->
-  <div class="card hidden" id="cardAccountPlus">
+  <div class="card" id="cardAccountPlus">
     <div class="field-label">Account (+)</div>
     <div class="text-roll-wrapper" id="rollAccountPlus">
       <div class="text-roll-highlight"></div>
@@ -504,23 +504,7 @@ document.getElementById('manualValue').addEventListener('input', (e) => {
 // ============================================================
 
 function watchLabel() {
-  const freeLabel = document.getElementById('freeLabel');
-  const cardPlus = document.getElementById('cardAccountPlus');
-
-  function check() {
-    const val = rollLabelInstance.getValue().toLowerCase();
-    if (val === 'transfer') {
-      cardPlus.classList.remove('hidden');
-    } else {
-      cardPlus.classList.add('hidden');
-    }
-  }
-
-  // Check on roll change — use MutationObserver on the track transform
-  const observer = new MutationObserver(check);
-  const labelTrack = document.querySelector('#rollLabel .text-roll-track');
-  observer.observe(labelTrack, { attributes: true, attributeFilter: ['style'] });
-  freeLabel.addEventListener('input', check);
+  // No longer hiding/showing Account(+) — always visible
 }
 
 // ============================================================
@@ -597,7 +581,6 @@ function resetForm() {
   document.getElementById('freeAccountPlus').value = '';
   document.getElementById('freeAssetclass').value = '';
   document.getElementById('manualValue').value = '';
-  document.getElementById('cardAccountPlus').classList.add('hidden');
   setNumIndex(0);
   isNegative = true;
   document.getElementById('rollSign').textContent = '−';
@@ -639,7 +622,7 @@ function populateForm(row) {
   }
 
   if ((row.label || '').toLowerCase() === 'transfer') {
-    document.getElementById('cardAccountPlus').classList.remove('hidden');
+    // Account(+) is always visible now
   }
 
   document.getElementById('btnSubmit').textContent = 'Update';
@@ -677,7 +660,7 @@ function renderRecent(rows) {
 
 async function loadRecent() {
   try {
-    const result = await apiCall({ action: 'getRecent', count: 20 });
+    const result = await apiCall({ action: 'getRecent', count: 500 });
     if (result.success) renderRecent(result.rows);
   } catch (e) {
     document.getElementById('recentList').innerHTML = '<p>Failed to load.</p>';
