@@ -144,7 +144,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v11</h1>
+  <h1>Expense Tracker v12</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -520,6 +520,20 @@ async function apiCall(data) {
 }
 
 // ============================================================
+// TIMESTAMP FORMAT: M/D/YYYY H:MM:SS
+// ============================================================
+function formatTimestamp() {
+  const d = new Date();
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const year = d.getFullYear();
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${month}/${day}/${year} ${h}:${m}:${s}`;
+}
+
+// ============================================================
 // SUBMIT
 // ============================================================
 async function handleSubmit() {
@@ -541,7 +555,7 @@ async function handleSubmit() {
 
   const payload = {
     action: editingRow ? 'update' : 'submit',
-    timestamp: editingRow ? editingRow.timestamp : new Date().toLocaleString(),
+    timestamp: editingRow ? editingRow.timestamp : formatTimestamp(),
     accountMinus,
     value,
     label,
