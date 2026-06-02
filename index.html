@@ -128,6 +128,14 @@ body {
 .recent-entry .re-value.negative { color: var(--danger); }
 .recent-entry .re-details { font-size: 13px; color: var(--secondary); margin-top: 2px; }
 .recent-entry .re-time { font-size: 12px; color: var(--secondary); }
+.btn-delete-entry {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border-radius: 16px; border: none;
+  background: var(--danger); color: #fff; font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.btn-delete-entry:active { opacity: 0.7; }
+.recent-entry { position: relative; padding-right: 44px; }
 
 /* Views */
 .view { display: none; }
@@ -144,7 +152,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v12</h1>
+  <h1>Expense Tracker v13</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -666,8 +674,28 @@ function renderRecent(rows) {
         <span class="re-time">${row.timestamp}</span>
       </div>
       <div class="re-details">${row.accountMinus} · ${row.label} · ${row.details}</div>
+      <button class="btn-delete-entry" data-row="${row.rowIndex}">✕</button>
     `;
-    div.addEventListener('click', () => populateForm(row));
+    div.querySelector('.re-details').addEventListener('click', () => populateForm(row));
+    div.querySelector('.re-top').addEventListener('click', () => populateForm(row));
+    div.querySelector('.btn-delete-entry').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete this entry?')) return;
+      const btn = e.target;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const result = await apiCall({ action: 'delete', rowIndex: row.rowIndex });
+        if (result.success) {
+          div.remove();
+          showToast('Deleted');
+        } else {
+          showToast('Error: ' + (result.error || 'Unknown'));
+        }
+      } catch (err) {
+        showToast('Network error');
+      }
+    });
     list.appendChild(div);
   });
 }
