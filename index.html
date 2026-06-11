@@ -147,12 +147,71 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .hidden { display: none !important; }
+
+/* Field header row (label + edit button) */
+.field-row {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+}
+.field-row .field-label { margin-bottom: 0; }
+.edit-btn {
+  background: none; border: none; color: var(--primary);
+  font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 4px;
+}
+.edit-btn:active { opacity: 0.6; }
+
+/* Category editor modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 2000;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.modal {
+  background: var(--card); width: 100%; max-width: 500px;
+  border-radius: 16px 16px 0 0; max-height: 80dvh; display: flex; flex-direction: column;
+  animation: slideUp 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 0.5px solid var(--border);
+}
+.modal-header span { font-size: 16px; font-weight: 600; }
+.modal-header button {
+  background: none; border: none; color: var(--primary);
+  font-size: 15px; font-weight: 600; cursor: pointer; padding: 4px;
+}
+.modal-list { overflow-y: auto; padding: 8px 20px; flex: 1; }
+.modal-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 0.5px solid var(--border);
+}
+.modal-item span { font-size: 15px; }
+.modal-item span.blank { color: var(--secondary); font-style: italic; }
+.modal-item button {
+  width: 28px; height: 28px; border-radius: 14px; border: none;
+  background: var(--danger); color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.modal-item button:active { opacity: 0.7; }
+.modal-add {
+  display: flex; gap: 8px; padding: 12px 20px 20px;
+  border-top: 0.5px solid var(--border);
+}
+.modal-add input {
+  flex: 1; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 10px; font-size: 16px; background: var(--input-bg); outline: none;
+}
+.modal-add input:focus { border-color: var(--primary); background: #fff; }
+.modal-add button {
+  padding: 10px 18px; border: none; border-radius: 10px;
+  background: var(--primary); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.modal-add button:active { opacity: 0.7; }
 </style>
 </head>
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v14</h1>
+  <h1>Expense Tracker v15</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -162,7 +221,10 @@ body {
 
   <!-- Account (-) -->
   <div class="card">
-    <div class="field-label">Account (−)</div>
+    <div class="field-row">
+      <span class="field-label">Account (−)</span>
+      <button class="edit-btn" data-roll="accountMinus">Edit</button>
+    </div>
     <div class="text-roll-wrapper" id="rollAccountMinus">
       <div class="text-roll-highlight"></div>
       <div class="text-roll-track"></div>
@@ -185,7 +247,10 @@ body {
 
   <!-- Label -->
   <div class="card">
-    <div class="field-label">Label</div>
+    <div class="field-row">
+      <span class="field-label">Label</span>
+      <button class="edit-btn" data-roll="label">Edit</button>
+    </div>
     <div class="text-roll-wrapper" id="rollLabel">
       <div class="text-roll-highlight"></div>
       <div class="text-roll-track"></div>
@@ -195,7 +260,10 @@ body {
 
   <!-- Details -->
   <div class="card">
-    <div class="field-label">Details</div>
+    <div class="field-row">
+      <span class="field-label">Details</span>
+      <button class="edit-btn" data-roll="details">Edit</button>
+    </div>
     <div class="text-roll-wrapper" id="rollDetails">
       <div class="text-roll-highlight"></div>
       <div class="text-roll-track"></div>
@@ -205,7 +273,10 @@ body {
 
   <!-- Account (+) — only visible when Label = Transfer -->
   <div class="card" id="cardAccountPlus">
-    <div class="field-label">Account (+)</div>
+    <div class="field-row">
+      <span class="field-label">Account (+)</span>
+      <button class="edit-btn" data-roll="accountPlus">Edit</button>
+    </div>
     <div class="text-roll-wrapper" id="rollAccountPlus">
       <div class="text-roll-highlight"></div>
       <div class="text-roll-track"></div>
@@ -215,7 +286,10 @@ body {
 
   <!-- Assetclassdetails -->
   <div class="card">
-    <div class="field-label">Asset Class Details</div>
+    <div class="field-row">
+      <span class="field-label">Asset Class Details</span>
+      <button class="edit-btn" data-roll="assetclass">Edit</button>
+    </div>
     <div class="text-roll-wrapper" id="rollAssetclass">
       <div class="text-roll-highlight"></div>
       <div class="text-roll-track"></div>
@@ -242,20 +316,72 @@ body {
 </div>
 </div>
 
+<!-- CATEGORY EDITOR MODAL -->
+<div class="modal-overlay hidden" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="editModalTitle">Edit</span>
+      <button id="editModalClose">Done</button>
+    </div>
+    <div class="modal-list" id="editModalList"></div>
+    <div class="modal-add">
+      <input type="text" id="editModalInput" placeholder="New category..." autocapitalize="characters">
+      <button id="editModalAdd">Add</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcJZvIahv2NbAKHW5ub7Rr-dkEBTAu1Zl3-G_FsvXQYIZc7RsoIvZrfTITVGxNOyM97w/exec';
 
 // ============================================================
-// DATA LISTS
+// DATA LISTS (defaults + user-editable, persisted to localStorage)
 // ============================================================
-const LISTS = {
+const DEFAULT_LISTS = {
   accountMinus: ['AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
   label: ['TRANSFER','GROCERIES','OFFERS','AMUSEMENTS','EXTRA','HOLIDAYS','TRANSPORTATION','RESTAURANTS','WORK','APPRECIATION','BILLS','OBJECTS','FOOD','WELLBEING','PRESENTS','SALARY','HEALTHCARE','CAR','HOUSING','CLOTHES','TAXES'],
   details: ['T','Groceries','Offers','Restaurants','Appreciation','WorkGroceries','Lima26','Depreciation','Food','Train','Bonus','Presents','Metro','Alcol','CreditCardCosts','Coke','Phone','Clothes','Hair','Micromobility','PlatinumMembership','AmexBluCashback','Commute','Medicines','London26','Oneoff','Psyco','Subscriptions','Base','Events','FoodTickets','Gym','Internet','MonthlyFee','Passion','Rent','Stocks','TFR','TFRTaxes','WorkMicromobility','Electricity','Taxi','Various','WorkTrain','Heritage','Specialists','TV','Maintenance','Bureaucracy','Fuel','Heating','IJPACapGain','Marta Patagonia','Olbia26','Palermo26-2','Technology','Trendevice'],
   accountPlus: ['','AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
   assetclass: ['','VWCE','PENSIONFUND','AMS:IMAE','APPLEWATCH','AUTOMOBILE','IPAD','IPHONE','LON:IUSE','TV','EMERGENCYFUND']
 };
+
+const LISTS_STORAGE_KEY = 'expenseTrackerLists';
+
+function loadLists() {
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(LISTS_STORAGE_KEY)); } catch (e) { stored = null; }
+  const result = {};
+  // Start from defaults, override with any stored list for known keys
+  Object.keys(DEFAULT_LISTS).forEach(key => {
+    result[key] = (stored && Array.isArray(stored[key])) ? stored[key].slice() : DEFAULT_LISTS[key].slice();
+  });
+  return result;
+}
+
+function saveLists() {
+  try { localStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(LISTS)); } catch (e) {}
+}
+
+const LISTS = loadLists();
+
+// Friendly titles for the editor modal
+const LIST_TITLES = {
+  accountMinus: 'Account (−)',
+  label: 'Label',
+  details: 'Details',
+  accountPlus: 'Account (+)',
+  assetclass: 'Asset Class Details'
+};
+
+// ============================================================
+// HAPTIC FEEDBACK
+// ============================================================
+function haptic(ms) {
+  if (navigator.vibrate) {
+    try { navigator.vibrate(ms); } catch (e) {}
+  }
+}
 
 // ============================================================
 // STATE
@@ -267,12 +393,14 @@ const ITEM_HEIGHT = 50;
 // TEXT ROLL PICKER CLASS
 // ============================================================
 class TextRoll {
-  constructor(wrapperId, items, freeInputId) {
+  constructor(wrapperId, listKey, freeInputId) {
     this.wrapper = document.getElementById(wrapperId);
     this.track = this.wrapper.querySelector('.text-roll-track');
     this.freeInput = document.getElementById(freeInputId);
-    this.items = items;
+    this.listKey = listKey;
+    this.items = LISTS[listKey];
     this.currentIndex = 0;
+    this.hoverIndex = 0;
     this.isDragging = false;
     this.velocity = 0;
     this.lastTouchY = 0;
@@ -291,17 +419,27 @@ class TextRoll {
       div.textContent = item;
       this.track.appendChild(div);
     });
-    this.setIndex(0);
+    this.setIndex(Math.min(this.currentIndex, this.items.length - 1));
+  }
+
+  // Re-read the (possibly edited) list and rebuild the picker
+  refresh() {
+    this.items = LISTS[this.listKey];
+    if (this.currentIndex > this.items.length - 1) this.currentIndex = 0;
+    this.build();
   }
 
   setIndex(idx) {
     idx = Math.max(0, Math.min(this.items.length - 1, idx));
+    const changed = idx !== this.currentIndex;
     this.currentIndex = idx;
+    this.hoverIndex = idx;
     this.track.style.transform = `translateY(${-idx * ITEM_HEIGHT + ITEM_HEIGHT}px)`;
     const children = this.track.children;
     for (let i = 0; i < children.length; i++) {
       children[i].classList.toggle('selected', i === idx);
     }
+    if (changed) haptic(10);
     // Clear free text when rolling
     this.freeInput.value = '';
   }
@@ -343,7 +481,11 @@ class TextRoll {
       this.lastTouchTime = now;
       const delta = y - this.touchStartY;
       const baseOffset = -this.currentIndex * ITEM_HEIGHT + ITEM_HEIGHT;
-      this.track.style.transform = `translateY(${baseOffset + delta}px)`;
+      const offset = baseOffset + delta;
+      this.track.style.transform = `translateY(${offset}px)`;
+      // Haptic tick each time we cross into a new item
+      const approx = Math.max(0, Math.min(this.items.length - 1, Math.round(1 - offset / ITEM_HEIGHT)));
+      if (approx !== this.hoverIndex) { this.hoverIndex = approx; haptic(6); }
     }, { passive: false });
 
     this.wrapper.addEventListener('touchend', () => {
@@ -378,6 +520,7 @@ class TextRoll {
 // ============================================================
 let numRollItems = [];
 let numCurrentIndex = 0;
+let numHoverIndex = 0;
 let numIsDragging = false;
 let numVelocity = 0;
 let numLastTouchY = 0;
@@ -403,13 +546,16 @@ function buildNumRoll() {
 
 function setNumIndex(idx) {
   idx = Math.max(0, Math.min(numRollItems.length - 1, idx));
+  const changed = idx !== numCurrentIndex;
   numCurrentIndex = idx;
+  numHoverIndex = idx;
   const track = document.querySelector('#rollValue .num-roll-track');
   track.style.transform = `translateY(${-idx * ITEM_HEIGHT + ITEM_HEIGHT}px)`;
   const children = track.children;
   for (let i = 0; i < children.length; i++) {
     children[i].classList.toggle('selected', i === idx);
   }
+  if (changed) haptic(10);
   document.getElementById('manualValue').value = getSignedValue();
 }
 
@@ -449,7 +595,10 @@ function initNumRollTouch() {
     const delta = y - numTouchStartY;
     const track = wrapper.querySelector('.num-roll-track');
     const baseOffset = -numCurrentIndex * ITEM_HEIGHT + ITEM_HEIGHT;
-    track.style.transform = `translateY(${baseOffset + delta}px)`;
+    const offset = baseOffset + delta;
+    track.style.transform = `translateY(${offset}px)`;
+    const approx = Math.max(0, Math.min(numRollItems.length - 1, Math.round(1 - offset / ITEM_HEIGHT)));
+    if (approx !== numHoverIndex) { numHoverIndex = approx; haptic(6); }
   }, { passive: false });
 
   wrapper.addEventListener('touchend', () => {
@@ -474,6 +623,7 @@ function initNumRollTouch() {
 // Sign toggle
 document.getElementById('rollSign').addEventListener('click', () => {
   isNegative = !isNegative;
+  haptic(10);
   const btn = document.getElementById('rollSign');
   btn.textContent = isNegative ? '−' : '+';
   btn.classList.toggle('negative', isNegative);
@@ -729,6 +879,97 @@ document.getElementById('btnSubmit').addEventListener('click', handleSubmit);
 document.getElementById('btnCancel').addEventListener('click', resetForm);
 
 // ============================================================
+// CATEGORY EDITOR (add / remove items per section)
+// ============================================================
+let activeEditorRoll = null;
+
+function rollByKey(key) {
+  switch (key) {
+    case 'accountMinus': return rollAccountMinus;
+    case 'label': return rollLabelInstance;
+    case 'details': return rollDetails;
+    case 'accountPlus': return rollAccountPlusInstance;
+    case 'assetclass': return rollAssetclass;
+    default: return null;
+  }
+}
+
+function renderEditorList() {
+  if (!activeEditorRoll) return;
+  const items = LISTS[activeEditorRoll.listKey];
+  const list = document.getElementById('editModalList');
+  list.innerHTML = '';
+  if (items.length === 0) {
+    list.innerHTML = '<p style="color:var(--secondary);font-size:14px;padding:12px 0;">No categories. Add one below.</p>';
+    return;
+  }
+  items.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'modal-item';
+    const isBlank = String(item).trim() === '';
+    row.innerHTML = `
+      <span class="${isBlank ? 'blank' : ''}">${isBlank ? '(blank)' : item}</span>
+      <button title="Remove">✕</button>`;
+    row.querySelector('button').addEventListener('click', () => {
+      items.splice(idx, 1);
+      saveLists();
+      activeEditorRoll.refresh();
+      renderEditorList();
+      haptic(15);
+    });
+    list.appendChild(row);
+  });
+}
+
+function openCategoryEditor(key) {
+  const roll = rollByKey(key);
+  if (!roll) return;
+  activeEditorRoll = roll;
+  document.getElementById('editModalTitle').textContent = 'Edit ' + (LIST_TITLES[key] || key);
+  document.getElementById('editModalInput').value = '';
+  renderEditorList();
+  document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeCategoryEditor() {
+  document.getElementById('editModal').classList.add('hidden');
+  activeEditorRoll = null;
+}
+
+function addCategory() {
+  if (!activeEditorRoll) return;
+  const input = document.getElementById('editModalInput');
+  const val = input.value.trim();
+  if (!val) return;
+  const items = LISTS[activeEditorRoll.listKey];
+  if (items.some(i => String(i).toLowerCase() === val.toLowerCase())) {
+    showToast('Already exists');
+    return;
+  }
+  items.push(val);
+  saveLists();
+  activeEditorRoll.refresh();
+  input.value = '';
+  renderEditorList();
+  haptic(15);
+}
+
+function initCategoryEditor() {
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openCategoryEditor(btn.dataset.roll));
+  });
+  document.getElementById('editModalClose').addEventListener('click', closeCategoryEditor);
+  document.getElementById('editModalAdd').addEventListener('click', addCategory);
+  document.getElementById('editModalInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addCategory();
+  });
+  // Tap outside the sheet to close
+  document.getElementById('editModal').addEventListener('click', (e) => {
+    if (e.target.id === 'editModal') closeCategoryEditor();
+  });
+}
+
+// ============================================================
 // TOAST
 // ============================================================
 function showToast(msg) {
@@ -744,15 +985,16 @@ function showToast(msg) {
 let rollAccountMinus, rollLabelInstance, rollDetails, rollAccountPlusInstance, rollAssetclass;
 
 document.addEventListener('DOMContentLoaded', () => {
-  rollAccountMinus = new TextRoll('rollAccountMinus', LISTS.accountMinus, 'freeAccountMinus');
-  rollLabelInstance = new TextRoll('rollLabel', LISTS.label, 'freeLabel');
-  rollDetails = new TextRoll('rollDetails', LISTS.details, 'freeDetails');
-  rollAssetclass = new TextRoll('rollAssetclass', LISTS.assetclass, 'freeAssetclass');
+  rollAccountMinus = new TextRoll('rollAccountMinus', 'accountMinus', 'freeAccountMinus');
+  rollLabelInstance = new TextRoll('rollLabel', 'label', 'freeLabel');
+  rollDetails = new TextRoll('rollDetails', 'details', 'freeDetails');
+  rollAssetclass = new TextRoll('rollAssetclass', 'assetclass', 'freeAssetclass');
   // Account+ is in a hidden div but still needs to be initialized
-  rollAccountPlusInstance = new TextRoll('rollAccountPlus', LISTS.accountPlus, 'freeAccountPlus');
+  rollAccountPlusInstance = new TextRoll('rollAccountPlus', 'accountPlus', 'freeAccountPlus');
   buildNumRoll();
   initNumRollTouch();
   watchLabel();
+  initCategoryEditor();
 });
 </script>
 </body>
