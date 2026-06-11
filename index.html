@@ -219,12 +219,27 @@ body {
   background: var(--primary); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
 }
 .modal-add button:active { opacity: 0.7; }
+
+/* Export sheet */
+.export-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.export-note { font-size: 13px; color: var(--secondary); }
+.export-text {
+  width: 100%; min-height: 180px; resize: vertical; padding: 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  color: var(--text); outline: none; white-space: pre;
+}
+.export-copy {
+  width: 100%; padding: 12px; border: none; border-radius: 10px;
+  background: var(--primary); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.export-copy:active { opacity: 0.7; }
 </style>
 </head>
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v18</h1>
+  <h1>Expense Tracker v19</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -316,6 +331,11 @@ body {
     <button class="btn btn-secondary hidden" id="btnCancel">Cancel Edit</button>
   </div>
 
+  <!-- Tools -->
+  <div class="card">
+    <button class="btn btn-secondary" id="btnExport" style="margin-top:0;">Export categories</button>
+  </div>
+
 </div>
 </div>
 
@@ -341,6 +361,21 @@ body {
     <div class="modal-add">
       <input type="text" id="editModalInput" placeholder="New category..." autocapitalize="characters">
       <button id="editModalAdd">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-overlay hidden" id="exportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="editModalTitle">Export categories</span>
+      <button id="exportModalClose">Done</button>
+    </div>
+    <div class="export-body">
+      <p class="export-note">Copy this and send it to Kiro to update the <code>index.html</code> defaults.</p>
+      <textarea class="export-text" id="exportText" readonly spellcheck="false"></textarea>
+      <button class="export-copy" id="exportCopy">Copy to clipboard</button>
     </div>
   </div>
 </div>
@@ -1076,6 +1111,38 @@ function resetActiveList() {
   showToast('Reset to defaults');
 }
 
+// ============================================================
+// EXPORT CATEGORIES (copy LISTS JSON to share with Kiro)
+// ============================================================
+function openExport() {
+  document.getElementById('exportText').value = JSON.stringify(LISTS, null, 2);
+  document.getElementById('exportModal').classList.remove('hidden');
+}
+
+function closeExport() {
+  document.getElementById('exportModal').classList.add('hidden');
+}
+
+function copyExport() {
+  const ta = document.getElementById('exportText');
+  const text = ta.value;
+  const fallback = () => {
+    ta.removeAttribute('readonly');
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    try { document.execCommand('copy'); } catch (e) {}
+    ta.setAttribute('readonly', '');
+    window.getSelection().removeAllRanges();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copied')).catch(() => { fallback(); showToast('Copied'); });
+  } else {
+    fallback();
+    showToast('Copied');
+  }
+  haptic(15);
+}
+
 function initCategoryEditor() {
   document.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', () => openCategoryEditor(btn.dataset.roll));
@@ -1089,6 +1156,13 @@ function initCategoryEditor() {
   // Tap outside the sheet to close
   document.getElementById('editModal').addEventListener('click', (e) => {
     if (e.target.id === 'editModal') closeCategoryEditor();
+  });
+  // Export
+  document.getElementById('btnExport').addEventListener('click', openExport);
+  document.getElementById('exportModalClose').addEventListener('click', closeExport);
+  document.getElementById('exportCopy').addEventListener('click', copyExport);
+  document.getElementById('exportModal').addEventListener('click', (e) => {
+    if (e.target.id === 'exportModal') closeExport();
   });
 }
 
