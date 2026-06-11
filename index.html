@@ -181,11 +181,23 @@ body {
 }
 .modal-list { overflow-y: auto; padding: 8px 20px; flex: 1; }
 .modal-item {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; align-items: center; gap: 8px;
   padding: 10px 0; border-bottom: 0.5px solid var(--border);
+  background: var(--card);
 }
 .modal-item span { font-size: 15px; }
+.modal-item .item-name { flex: 1; }
 .modal-item span.blank { color: var(--secondary); font-style: italic; }
+.drag-handle {
+  flex-shrink: 0; cursor: grab; color: var(--secondary); font-size: 18px;
+  line-height: 1; padding: 6px 6px 6px 0; touch-action: none;
+  user-select: none; -webkit-user-select: none;
+}
+.drag-handle:active { cursor: grabbing; }
+.modal-item.dragging {
+  border-radius: 8px; border-bottom-color: transparent;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18); position: relative; z-index: 10; opacity: 0.97;
+}
 .modal-item button {
   width: 28px; height: 28px; border-radius: 14px; border: none;
   background: var(--danger); color: #fff; font-size: 13px; font-weight: 700;
@@ -211,7 +223,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v15</h1>
+  <h1>Expense Tracker v16</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -907,18 +919,92 @@ function renderEditorList() {
     const row = document.createElement('div');
     row.className = 'modal-item';
     const isBlank = String(item).trim() === '';
-    row.innerHTML = `
-      <span class="${isBlank ? 'blank' : ''}">${isBlank ? '(blank)' : item}</span>
-      <button title="Remove">✕</button>`;
-    row.querySelector('button').addEventListener('click', () => {
+
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '\u2630'; // ☰ grabber
+    handle.title = 'Drag to reorder';
+    handle.addEventListener('pointerdown', (e) => startReorder(e, idx));
+
+    const name = document.createElement('span');
+    name.className = 'item-name' + (isBlank ? ' blank' : '');
+    name.textContent = isBlank ? '(blank)' : item;
+
+    const del = document.createElement('button');
+    del.title = 'Remove';
+    del.textContent = '\u2715'; // ✕
+    del.addEventListener('click', () => {
       items.splice(idx, 1);
       saveLists();
       activeEditorRoll.refresh();
       renderEditorList();
       haptic(15);
     });
+
+    row.appendChild(handle);
+    row.appendChild(name);
+    row.appendChild(del);
     list.appendChild(row);
   });
+}
+
+// Drag-to-reorder (pointer events: works for touch and mouse)
+let reorder = null;
+
+function startReorder(e, idx) {
+  if (!activeEditorRoll) return;
+  e.preventDefault();
+  const list = document.getElementById('editModalList');
+  const row = list.children[idx];
+  if (!row) return;
+  reorder = {
+    index: idx,
+    startY: e.clientY,
+    rowHeight: row.offsetHeight || 44
+  };
+  row.classList.add('dragging');
+  haptic(15);
+  document.addEventListener('pointermove', onReorderMove);
+  document.addEventListener('pointerup', endReorder);
+  document.addEventListener('pointercancel', endReorder);
+}
+
+function onReorderMove(e) {
+  if (!reorder) return;
+  e.preventDefault();
+  const list = document.getElementById('editModalList');
+  const items = LISTS[activeEditorRoll.listKey];
+  const row = list.children[reorder.index];
+  if (!row) return;
+  const delta = e.clientY - reorder.startY;
+  row.style.transform = `translateY(${delta}px)`;
+  let target = reorder.index + Math.round(delta / reorder.rowHeight);
+  target = Math.max(0, Math.min(items.length - 1, target));
+  if (target !== reorder.index) {
+    const [moved] = items.splice(reorder.index, 1);
+    items.splice(target, 0, moved);
+    reorder.index = target;
+    reorder.startY = e.clientY;
+    renderEditorList();
+    const newRow = list.children[target];
+    if (newRow) {
+      newRow.classList.add('dragging');
+      newRow.style.transform = 'translateY(0px)';
+    }
+    haptic(8);
+  }
+}
+
+function endReorder() {
+  if (!reorder) return;
+  document.removeEventListener('pointermove', onReorderMove);
+  document.removeEventListener('pointerup', endReorder);
+  document.removeEventListener('pointercancel', endReorder);
+  reorder = null;
+  saveLists();
+  if (activeEditorRoll) activeEditorRoll.refresh();
+  renderEditorList();
+  haptic(15);
 }
 
 function openCategoryEditor(key) {
