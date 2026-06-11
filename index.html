@@ -174,11 +174,12 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 20px; border-bottom: 0.5px solid var(--border);
 }
-.modal-header span { font-size: 16px; font-weight: 600; }
+.modal-header #editModalTitle { flex: 1; text-align: center; font-size: 16px; font-weight: 600; }
 .modal-header button {
   background: none; border: none; color: var(--primary);
-  font-size: 15px; font-weight: 600; cursor: pointer; padding: 4px;
+  font-size: 15px; font-weight: 600; cursor: pointer; padding: 4px; white-space: nowrap;
 }
+.modal-header .reset-link { color: var(--danger); }
 .modal-list { overflow-y: auto; padding: 8px 20px; flex: 1; }
 .modal-item {
   display: flex; align-items: center; gap: 8px;
@@ -223,7 +224,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v16</h1>
+  <h1>Expense Tracker v18</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -332,6 +333,7 @@ body {
 <div class="modal-overlay hidden" id="editModal">
   <div class="modal">
     <div class="modal-header">
+      <button id="editModalReset" class="reset-link">Reset</button>
       <span id="editModalTitle">Edit</span>
       <button id="editModalClose">Done</button>
     </div>
@@ -351,10 +353,10 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcJZvIahv2NbAKHW5ub
 // DATA LISTS (defaults + user-editable, persisted to localStorage)
 // ============================================================
 const DEFAULT_LISTS = {
-  accountMinus: ['AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
+  accountMinus: ['AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','MEMBERSHIP','TRENITALIA','ITALO','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
   label: ['TRANSFER','GROCERIES','OFFERS','AMUSEMENTS','EXTRA','HOLIDAYS','TRANSPORTATION','RESTAURANTS','WORK','APPRECIATION','BILLS','OBJECTS','FOOD','WELLBEING','PRESENTS','SALARY','HEALTHCARE','CAR','HOUSING','CLOTHES','TAXES'],
   details: ['T','Groceries','Offers','Restaurants','Appreciation','WorkGroceries','Lima26','Depreciation','Food','Train','Bonus','Presents','Metro','Alcol','CreditCardCosts','Coke','Phone','Clothes','Hair','Micromobility','PlatinumMembership','AmexBluCashback','Commute','Medicines','London26','Oneoff','Psyco','Subscriptions','Base','Events','FoodTickets','Gym','Internet','MonthlyFee','Passion','Rent','Stocks','TFR','TFRTaxes','WorkMicromobility','Electricity','Taxi','Various','WorkTrain','Heritage','Specialists','TV','Maintenance','Bureaucracy','Fuel','Heating','IJPACapGain','Marta Patagonia','Olbia26','Palermo26-2','Technology','Trendevice'],
-  accountPlus: ['','AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
+  accountPlus: ['','AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','MEMBERSHIP','TRENITALIA','ITALO','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
   assetclass: ['','VWCE','PENSIONFUND','AMS:IMAE','APPLEWATCH','AUTOMOBILE','IPAD','IPHONE','LON:IUSE','TV','EMERGENCYFUND']
 };
 
@@ -368,6 +370,10 @@ function loadLists() {
   Object.keys(DEFAULT_LISTS).forEach(key => {
     result[key] = (stored && Array.isArray(stored[key])) ? stored[key].slice() : DEFAULT_LISTS[key].slice();
   });
+  // Keep Account (+) in sync with Account (−): same accounts, plus a leading
+  // blank ("none") option. Account (−) is the source of truth on load.
+  const accounts = result.accountMinus.filter(x => String(x).trim() !== '');
+  result.accountPlus = ['', ...accounts];
   return result;
 }
 
@@ -906,6 +912,31 @@ function rollByKey(key) {
   }
 }
 
+// Account (−) and Account (+) share the same accounts. Account (+) keeps a
+// leading blank ("none") option; Account (−) does not. Mirror edits both ways.
+function syncAccountLists(sourceKey) {
+  if (sourceKey === 'accountMinus') {
+    const accounts = LISTS.accountMinus.filter(x => String(x).trim() !== '');
+    LISTS.accountPlus = ['', ...accounts];
+  } else if (sourceKey === 'accountPlus') {
+    LISTS.accountMinus = LISTS.accountPlus.filter(x => String(x).trim() !== '');
+  }
+}
+
+// Persist + refresh pickers after any category change, syncing the
+// Account (−)/Account (+) pair when either is edited.
+function commitListChange() {
+  const key = activeEditorRoll ? activeEditorRoll.listKey : null;
+  if (key === 'accountMinus' || key === 'accountPlus') {
+    syncAccountLists(key);
+    if (rollAccountMinus) rollAccountMinus.refresh();
+    if (rollAccountPlusInstance) rollAccountPlusInstance.refresh();
+  }
+  saveLists();
+  if (activeEditorRoll) activeEditorRoll.refresh();
+  renderEditorList();
+}
+
 function renderEditorList() {
   if (!activeEditorRoll) return;
   const items = LISTS[activeEditorRoll.listKey];
@@ -935,9 +966,7 @@ function renderEditorList() {
     del.textContent = '\u2715'; // ✕
     del.addEventListener('click', () => {
       items.splice(idx, 1);
-      saveLists();
-      activeEditorRoll.refresh();
-      renderEditorList();
+      commitListChange();
       haptic(15);
     });
 
@@ -1001,9 +1030,7 @@ function endReorder() {
   document.removeEventListener('pointerup', endReorder);
   document.removeEventListener('pointercancel', endReorder);
   reorder = null;
-  saveLists();
-  if (activeEditorRoll) activeEditorRoll.refresh();
-  renderEditorList();
+  commitListChange();
   haptic(15);
 }
 
@@ -1033,11 +1060,20 @@ function addCategory() {
     return;
   }
   items.push(val);
-  saveLists();
-  activeEditorRoll.refresh();
+  commitListChange();
   input.value = '';
-  renderEditorList();
   haptic(15);
+}
+
+function resetActiveList() {
+  if (!activeEditorRoll) return;
+  const key = activeEditorRoll.listKey;
+  const title = LIST_TITLES[key] || key;
+  if (!confirm('Reset "' + title + '" to the built-in defaults? This discards your changes for this section.')) return;
+  LISTS[key] = DEFAULT_LISTS[key].slice();
+  commitListChange(); // syncs Account (−)/(+) pair and refreshes pickers
+  haptic(20);
+  showToast('Reset to defaults');
 }
 
 function initCategoryEditor() {
@@ -1045,6 +1081,7 @@ function initCategoryEditor() {
     btn.addEventListener('click', () => openCategoryEditor(btn.dataset.roll));
   });
   document.getElementById('editModalClose').addEventListener('click', closeCategoryEditor);
+  document.getElementById('editModalReset').addEventListener('click', resetActiveList);
   document.getElementById('editModalAdd').addEventListener('click', addCategory);
   document.getElementById('editModalInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addCategory();
