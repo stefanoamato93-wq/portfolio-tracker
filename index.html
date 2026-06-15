@@ -220,6 +220,19 @@ body {
 }
 .modal-add button:active { opacity: 0.7; }
 
+/* Details-per-label selector inside the editor */
+.modal-sublabel {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 20px 4px;
+}
+.modal-sublabel span {
+  font-size: 13px; color: var(--secondary); font-weight: 500; white-space: nowrap;
+}
+.modal-sublabel select {
+  flex: 1; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--input-bg); font-size: 15px; color: var(--text); outline: none;
+}
+
 /* Export sheet */
 .export-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
 .export-note { font-size: 13px; color: var(--secondary); }
@@ -239,7 +252,7 @@ body {
 <body>
 <div class="header">
   <button id="btnRecent">History</button>
-  <h1>Expense Tracker v19</h1>
+  <h1>Expense Tracker v20</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -357,6 +370,10 @@ body {
       <span id="editModalTitle">Edit</span>
       <button id="editModalClose">Done</button>
     </div>
+    <div class="modal-sublabel hidden" id="editDetailsLabelRow">
+      <span>Details for label:</span>
+      <select id="editDetailsLabelSelect"></select>
+    </div>
     <div class="modal-list" id="editModalList"></div>
     <div class="modal-add">
       <input type="text" id="editModalInput" placeholder="New category..." autocapitalize="characters">
@@ -390,12 +407,49 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxcJZvIahv2NbAKHW5ub
 const DEFAULT_LISTS = {
   accountMinus: ['AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','MEMBERSHIP','TRENITALIA','ITALO','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
   label: ['TRANSFER','GROCERIES','OFFERS','AMUSEMENTS','EXTRA','HOLIDAYS','TRANSPORTATION','RESTAURANTS','WORK','APPRECIATION','BILLS','OBJECTS','FOOD','WELLBEING','PRESENTS','SALARY','HEALTHCARE','CAR','HOUSING','CLOTHES','TAXES'],
-  details: ['T','Groceries','Offers','Restaurants','Appreciation','WorkGroceries','Lima26','Depreciation','Food','Train','Bonus','Presents','Metro','Alcol','CreditCardCosts','Coke','Phone','Clothes','Hair','Micromobility','PlatinumMembership','AmexBluCashback','Commute','Medicines','London26','Oneoff','Psyco','Subscriptions','Base','Events','FoodTickets','Gym','Internet','MonthlyFee','Passion','Rent','Stocks','TFR','TFRTaxes','WorkMicromobility','Electricity','Taxi','Various','WorkTrain','Heritage','Specialists','TV','Maintenance','Bureaucracy','Fuel','Heating','IJPACapGain','Marta Patagonia','Olbia26','Palermo26-2','Technology','Trendevice'],
+  details: {
+    HOUSING: ['Rent','MonthlyFee','HouseStuff','Maintenance','Cleaning'],
+    BILLS: ['Electricity','Internet','Heating','Tari','Phone','TV','Bureaucracy'],
+    GROCERIES: ['Groceries'],
+    CAR: ['Fuel','Insurance','Maintenance','ChangeOwnership','StateTax','Telepass','Fine','Parking','Depreciation'],
+    TRANSPORTATION: ['Train','Taxi','Metro','Micromobility'],
+    WORK: ['WorkTrain','WorkGroceries','WorkMetro','WorkMicromobility'],
+    HEALTHCARE: ['Specialists','Medicines','Dentist','Analysis','Exams','Physiotherapy'],
+    HOLIDAYS: ['Palermo-Jun26','Palermo-Jul26','Warsaw-Sep26'],
+    OBJECTS: ['Depreciation'],
+    WELLBEING: ['Psyco','Gym','Hair','Sport','Massage'],
+    AMUSEMENTS: ['Alcol','Coke','CreditCardCosts','Subscriptions','Events','Games','Dinners'],
+    RESTAURANTS: ['Restaurants'],
+    FOOD: ['Food'],
+    CLOTHES: ['Clothes'],
+    PRESENTS: ['Presents'],
+    OFFERS: ['Offers'],
+    TRANSFER: ['T'],
+    EXTRA: [],
+    APPRECIATION: [],
+    SALARY: [],
+    TAXES: []
+  },
   accountPlus: ['','AMEXPLATINUM','FINECO','AMEX','TRADEREPUBLIC','SATISPAY','EDENRED','CONCUR','CASH','OBJECTS','REVOLUT','SPLITWISE','PAYPAL','AMEXGOLD','DEGIRO','DIRECTASTOCKS','MEMBERSHIP','TRENITALIA','ITALO','PRIAMO','TFR','UPWORK','CREDITS','UNIPOL','DEBTS','ALLIANZ','TFRTAXES','FIDELITY','TRSTOCKS','DIRECTAFUNDS','AROMI','CAPGAIN'],
   assetclass: ['','VWCE','PENSIONFUND','AMS:IMAE','APPLEWATCH','AUTOMOBILE','IPAD','IPHONE','LON:IUSE','TV','EMERGENCYFUND']
 };
 
 const LISTS_STORAGE_KEY = 'expenseTrackerLists';
+
+function mergeDetails(stored) {
+  // details is keyed by label. Start from defaults, then override per-label
+  // arrays with any stored ones. Ignore the old v19 flat-array format.
+  const out = {};
+  Object.keys(DEFAULT_LISTS.details).forEach(lbl => {
+    out[lbl] = DEFAULT_LISTS.details[lbl].slice();
+  });
+  if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+    Object.keys(stored).forEach(lbl => {
+      if (Array.isArray(stored[lbl])) out[lbl] = stored[lbl].slice();
+    });
+  }
+  return out;
+}
 
 function loadLists() {
   let stored = null;
@@ -403,7 +457,12 @@ function loadLists() {
   const result = {};
   // Start from defaults, override with any stored list for known keys
   Object.keys(DEFAULT_LISTS).forEach(key => {
-    result[key] = (stored && Array.isArray(stored[key])) ? stored[key].slice() : DEFAULT_LISTS[key].slice();
+    if (key === 'details') {
+      // details is a per-label map, not a flat array
+      result.details = mergeDetails(stored && stored.details);
+    } else {
+      result[key] = (stored && Array.isArray(stored[key])) ? stored[key].slice() : DEFAULT_LISTS[key].slice();
+    }
   });
   // Keep Account (+) in sync with Account (−): same accounts, plus a leading
   // blank ("none") option. Account (−) is the source of truth on load.
@@ -443,15 +502,61 @@ let editingRow = null;
 const ITEM_HEIGHT = 50;
 
 // ============================================================
+// LABEL -> DETAILS DEPENDENCY
+// The Details list shown depends on the currently selected Label.
+// LISTS.details is a map { LABEL: [details...] }.
+// ============================================================
+function currentLabel() {
+  return rollLabelInstance ? rollLabelInstance.getValue() : '';
+}
+
+// Find the actual details-map key for a label (case-insensitive)
+function findDetailsKey(label) {
+  if (!label) return null;
+  if (Object.prototype.hasOwnProperty.call(LISTS.details, label)) return label;
+  const lower = String(label).toLowerCase();
+  return Object.keys(LISTS.details).find(k => k.toLowerCase() === lower) || null;
+}
+
+function detailsListForLabel(label) {
+  const key = findDetailsKey(label);
+  return key ? LISTS.details[key] : [];
+}
+
+// Items provider used by the Details TextRoll
+function currentDetailsList() {
+  return detailsListForLabel(currentLabel());
+}
+
+// Re-render the Details roll whenever the Label changes
+function refreshDetailsForLabel() {
+  if (!rollDetails) return;
+  rollDetails.freeInput.value = '';
+  rollDetails.currentIndex = 0;
+  rollDetails.refresh();
+}
+
+// Ensure a details array exists for a label so it can be edited
+function ensureDetailsKey(label) {
+  let key = findDetailsKey(label);
+  if (!key) { key = label; LISTS.details[key] = []; }
+  return key;
+}
+
+// ============================================================
 // TEXT ROLL PICKER CLASS
 // ============================================================
 class TextRoll {
-  constructor(wrapperId, listKey, freeInputId) {
+  constructor(wrapperId, listKey, freeInputId, getItemsFn) {
     this.wrapper = document.getElementById(wrapperId);
     this.track = this.wrapper.querySelector('.text-roll-track');
     this.freeInput = document.getElementById(freeInputId);
     this.listKey = listKey;
-    this.items = LISTS[listKey];
+    // getItemsFn lets a roll derive its list dynamically (e.g. Details depends
+    // on the selected Label). Defaults to the static LISTS[listKey].
+    this.getItemsFn = getItemsFn || (() => LISTS[listKey]);
+    this.onChange = null;
+    this.items = this.getItemsFn();
     this.currentIndex = 0;
     this.hoverIndex = 0;
     this.isDragging = false;
@@ -465,6 +570,7 @@ class TextRoll {
   }
 
   build() {
+    this.items = this.getItemsFn();
     this.track.innerHTML = '';
     this.items.forEach(item => {
       const div = document.createElement('div');
@@ -475,9 +581,9 @@ class TextRoll {
     this.setIndex(Math.min(this.currentIndex, this.items.length - 1));
   }
 
-  // Re-read the (possibly edited) list and rebuild the picker
+  // Re-read the (possibly edited / label-dependent) list and rebuild the picker
   refresh() {
-    this.items = LISTS[this.listKey];
+    this.items = this.getItemsFn();
     if (this.currentIndex > this.items.length - 1) this.currentIndex = 0;
     this.build();
   }
@@ -495,6 +601,8 @@ class TextRoll {
     if (changed) haptic(10);
     // Clear free text when rolling
     this.freeInput.value = '';
+    // Notify listeners (e.g. Label change re-renders the Details roll)
+    if (this.onChange) this.onChange();
   }
 
   getValue() {
@@ -510,6 +618,8 @@ class TextRoll {
       this.freeInput.value = '';
     } else {
       this.freeInput.value = val || '';
+      // Free-typed value still needs to notify listeners (Label -> Details)
+      if (this.onChange) this.onChange();
     }
   }
 
@@ -935,6 +1045,33 @@ document.getElementById('btnCancel').addEventListener('click', resetForm);
 // CATEGORY EDITOR (add / remove items per section)
 // ============================================================
 let activeEditorRoll = null;
+// When editing Details, this holds which label's details we are editing
+let editorDetailsLabel = null;
+
+// The array the editor is currently mutating. For Details this is the
+// selected label's list; for every other section it's LISTS[listKey].
+function activeEditorArray() {
+  if (!activeEditorRoll) return null;
+  if (activeEditorRoll.listKey === 'details') {
+    return LISTS.details[ensureDetailsKey(editorDetailsLabel)];
+  }
+  return LISTS[activeEditorRoll.listKey];
+}
+
+// Populate the "Details for label" dropdown shown in the Details editor
+function buildDetailsLabelSelect() {
+  const sel = document.getElementById('editDetailsLabelSelect');
+  sel.innerHTML = '';
+  LISTS.label.forEach(lbl => {
+    const opt = document.createElement('option');
+    opt.value = lbl;
+    opt.textContent = lbl;
+    sel.appendChild(opt);
+  });
+  const match = LISTS.label.find(l => l.toLowerCase() === String(editorDetailsLabel).toLowerCase());
+  sel.value = match || (LISTS.label[0] || '');
+  editorDetailsLabel = sel.value;
+}
 
 function rollByKey(key) {
   switch (key) {
@@ -974,7 +1111,7 @@ function commitListChange() {
 
 function renderEditorList() {
   if (!activeEditorRoll) return;
-  const items = LISTS[activeEditorRoll.listKey];
+  const items = activeEditorArray();
   const list = document.getElementById('editModalList');
   list.innerHTML = '';
   if (items.length === 0) {
@@ -1037,7 +1174,7 @@ function onReorderMove(e) {
   if (!reorder) return;
   e.preventDefault();
   const list = document.getElementById('editModalList');
-  const items = LISTS[activeEditorRoll.listKey];
+  const items = activeEditorArray();
   const row = list.children[reorder.index];
   if (!row) return;
   const delta = e.clientY - reorder.startY;
@@ -1075,6 +1212,15 @@ function openCategoryEditor(key) {
   activeEditorRoll = roll;
   document.getElementById('editModalTitle').textContent = 'Edit ' + (LIST_TITLES[key] || key);
   document.getElementById('editModalInput').value = '';
+  const detailsRow = document.getElementById('editDetailsLabelRow');
+  if (key === 'details') {
+    // Editing details: pick which label's details to edit (default = current)
+    editorDetailsLabel = currentLabel() || (LISTS.label[0] || '');
+    buildDetailsLabelSelect();
+    detailsRow.classList.remove('hidden');
+  } else {
+    detailsRow.classList.add('hidden');
+  }
   renderEditorList();
   document.getElementById('editModal').classList.remove('hidden');
 }
@@ -1089,7 +1235,7 @@ function addCategory() {
   const input = document.getElementById('editModalInput');
   const val = input.value.trim();
   if (!val) return;
-  const items = LISTS[activeEditorRoll.listKey];
+  const items = activeEditorArray();
   if (items.some(i => String(i).toLowerCase() === val.toLowerCase())) {
     showToast('Already exists');
     return;
@@ -1103,6 +1249,17 @@ function addCategory() {
 function resetActiveList() {
   if (!activeEditorRoll) return;
   const key = activeEditorRoll.listKey;
+  if (key === 'details') {
+    // Reset only the currently selected label's details
+    const lbl = editorDetailsLabel;
+    if (!confirm('Reset details for "' + lbl + '" to the built-in defaults? This discards your changes for this label.')) return;
+    const defKey = Object.keys(DEFAULT_LISTS.details).find(k => k.toLowerCase() === String(lbl).toLowerCase());
+    LISTS.details[ensureDetailsKey(lbl)] = defKey ? DEFAULT_LISTS.details[defKey].slice() : [];
+    commitListChange();
+    haptic(20);
+    showToast('Reset to defaults');
+    return;
+  }
   const title = LIST_TITLES[key] || key;
   if (!confirm('Reset "' + title + '" to the built-in defaults? This discards your changes for this section.')) return;
   LISTS[key] = DEFAULT_LISTS[key].slice();
@@ -1150,6 +1307,11 @@ function initCategoryEditor() {
   document.getElementById('editModalClose').addEventListener('click', closeCategoryEditor);
   document.getElementById('editModalReset').addEventListener('click', resetActiveList);
   document.getElementById('editModalAdd').addEventListener('click', addCategory);
+  // Switching the label in the Details editor re-renders that label's list
+  document.getElementById('editDetailsLabelSelect').addEventListener('change', (e) => {
+    editorDetailsLabel = e.target.value;
+    renderEditorList();
+  });
   document.getElementById('editModalInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addCategory();
   });
@@ -1184,10 +1346,16 @@ let rollAccountMinus, rollLabelInstance, rollDetails, rollAccountPlusInstance, r
 document.addEventListener('DOMContentLoaded', () => {
   rollAccountMinus = new TextRoll('rollAccountMinus', 'accountMinus', 'freeAccountMinus');
   rollLabelInstance = new TextRoll('rollLabel', 'label', 'freeLabel');
-  rollDetails = new TextRoll('rollDetails', 'details', 'freeDetails');
+  // Details derives its list from the currently selected Label
+  rollDetails = new TextRoll('rollDetails', 'details', 'freeDetails', currentDetailsList);
   rollAssetclass = new TextRoll('rollAssetclass', 'assetclass', 'freeAssetclass');
   // Account+ is in a hidden div but still needs to be initialized
   rollAccountPlusInstance = new TextRoll('rollAccountPlus', 'accountPlus', 'freeAccountPlus');
+  // When the Label changes (scroll/snap or free text), re-render Details
+  rollLabelInstance.onChange = refreshDetailsForLabel;
+  document.getElementById('freeLabel').addEventListener('input', refreshDetailsForLabel);
+  // Show the correct Details for the initial Label
+  refreshDetailsForLabel();
   buildNumRoll();
   initNumRollTouch();
   watchLabel();
