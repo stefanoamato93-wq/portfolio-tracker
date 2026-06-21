@@ -338,7 +338,7 @@ body {
     <button id="btnQueryToggle" class="toggle-btn" title="Query database">🔎</button>
     <button id="btnRecent">History</button>
   </div>
-  <h1>Expense Tracker v23</h1>
+  <h1>Expense Tracker v24</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -486,10 +486,13 @@ body {
 
     <div class="qb-section">
       <div class="qb-section-title">
-        <span>Labels</span>
+        <span>Label</span>
         <button id="qbClearLabels">Clear</button>
       </div>
-      <div class="qb-chips" id="qbLabels"><div class="spinner"></div></div>
+      <div class="text-roll-wrapper" id="qbLabelsRoll">
+        <div class="text-roll-highlight"></div>
+        <div class="text-roll-track"><div class="spinner"></div></div>
+      </div>
     </div>
 
     <div class="qb-section">
@@ -497,16 +500,21 @@ body {
         <span>Details</span>
         <button id="qbClearDetails">Clear</button>
       </div>
-      <input type="text" class="free-text-input" id="qbDetailsSearch" placeholder="Filter details..." style="margin-top:0;margin-bottom:8px;">
-      <div class="qb-chips" id="qbDetails"></div>
+      <div class="text-roll-wrapper" id="qbDetailsRoll">
+        <div class="text-roll-highlight"></div>
+        <div class="text-roll-track"></div>
+      </div>
     </div>
 
     <div class="qb-section">
       <div class="qb-section-title">
-        <span>Accounts</span>
+        <span>Account</span>
         <button id="qbClearAccounts">Clear</button>
       </div>
-      <div class="qb-chips" id="qbAccounts"></div>
+      <div class="text-roll-wrapper" id="qbAccountsRoll">
+        <div class="text-roll-highlight"></div>
+        <div class="text-roll-track"></div>
+      </div>
     </div>
 
     <div class="qb-section">
@@ -1259,11 +1267,163 @@ document.getElementById('btnCancel').addEventListener('click', resetForm);
 // FULL-DATABASE QUERY VIEW
 // ============================================================
 let qbMeta = null;
-const qbSel = { labels: new Set(), accounts: new Set(), types: new Set(), categories: new Set(), details: new Set() };
+const qbSel = { types: new Set(), categories: new Set() };
 let qbSign = 'all';
 let qbActivePreset = null; // remembered so saved queries stay relative (e.g. "this year")
 let qbRawData = null;
 const QUERIES_STORAGE_KEY = 'expenseTrackerQueries';
+
+// First option in every query roll. Selecting it means "no filter".
+const ALL_OPT = '(All)';
+
+// Roll instances for the query filters (built lazily once meta arrives).
+let qbLabelRoll = null, qbDetailsRoll = null, qbAccountRoll = null;
+
+// Item providers: prepend (All) to the distinct DB values.
+function qbLabelItems() {
+  return [ALL_OPT, ...((qbMeta && qbMeta.labels) || [])];
+}
+function qbAccountItems() {
+  return [ALL_OPT, ...((qbMeta && qbMeta.accounts) || [])];
+}
+// Details narrow to the selected Label when one is chosen (else all details).
+function qbDetailItems() {
+  const lbl = qbLabelRoll ? qbLabelRoll.getValue() : '';
+  let det = (qbMeta && qbMeta.details) || [];
+  if (lbl && qbMeta && qbMeta.detailsByLabel) {
+    const mapped = qbMeta.detailsByLabel[String(lbl).toUpperCase()];
+    if (mapped) det = mapped;
+  }
+  return [ALL_OPT, ...det];
+}
+
+// ============================================================
+// QUERY ROLL — single-select iOS-style picker for query filters.
+// Reuses the .text-roll-* CSS. getValue() returns '' for (All).
+// ============================================================
+class QueryRoll {
+  constructor(wrapperId, getItemsFn) {
+    this.wrapper = document.getElementById(wrapperId);
+    this.track = this.wrapper.querySelector('.text-roll-track');
+    this.getItemsFn = getItemsFn;
+    this.onChange = null;
+    this.items = [];
+    this.currentIndex = 0;
+    this.hoverIndex = 0;
+    this.isDragging = false;
+    this.velocity = 0;
+    this.lastTouchY = 0;
+    this.lastTouchTime = 0;
+    this.touchStartY = 0;
+    this.build();
+    this.initTouch();
+  }
+
+  build() {
+    this.items = this.getItemsFn() || [ALL_OPT];
+    this.track.innerHTML = '';
+    this.items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'text-roll-item';
+      div.textContent = item;
+      this.track.appendChild(div);
+    });
+    this.setIndex(Math.min(this.currentIndex, this.items.length - 1), true);
+  }
+
+  refresh() {
+    this.items = this.getItemsFn() || [ALL_OPT];
+    if (this.currentIndex > this.items.length - 1) this.currentIndex = 0;
+    this.build();
+  }
+
+  setIndex(idx, silent) {
+    idx = Math.max(0, Math.min(this.items.length - 1, idx));
+    const changed = idx !== this.currentIndex;
+    this.currentIndex = idx;
+    this.hoverIndex = idx;
+    this.track.style.transform = `translateY(${-idx * ITEM_HEIGHT + ITEM_HEIGHT}px)`;
+    const children = this.track.children;
+    for (let i = 0; i < children.length; i++) {
+      children[i].classList.toggle('selected', i === idx);
+    }
+    if (changed) haptic(10);
+    if (changed && !silent && this.onChange) this.onChange();
+  }
+
+  // '' means (All) / no filter
+  getValue() {
+    const v = this.items[this.currentIndex];
+    return (v === undefined || v === ALL_OPT) ? '' : v;
+  }
+
+  setValue(val) {
+    this.track.style.transition = 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1)';
+    if (!val) { this.setIndex(0, true); return; }
+    const idx = this.items.findIndex(item => String(item).toLowerCase() === String(val).toLowerCase());
+    this.setIndex(idx >= 0 ? idx : 0, true);
+  }
+
+  initTouch() {
+    this.wrapper.addEventListener('touchstart', (e) => {
+      this.isDragging = true;
+      this.touchStartY = e.touches[0].clientY;
+      this.lastTouchY = this.touchStartY;
+      this.lastTouchTime = Date.now();
+      this.velocity = 0;
+      this.track.style.transition = 'none';
+    }, { passive: false });
+
+    this.wrapper.addEventListener('touchmove', (e) => {
+      if (!this.isDragging) return;
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const now = Date.now();
+      const dt = now - this.lastTouchTime;
+      if (dt > 0) this.velocity = (y - this.lastTouchY) / dt;
+      this.lastTouchY = y;
+      this.lastTouchTime = now;
+      const delta = y - this.touchStartY;
+      const baseOffset = -this.currentIndex * ITEM_HEIGHT + ITEM_HEIGHT;
+      const offset = baseOffset + delta;
+      this.track.style.transform = `translateY(${offset}px)`;
+      const approx = Math.max(0, Math.min(this.items.length - 1, Math.round(1 - offset / ITEM_HEIGHT)));
+      if (approx !== this.hoverIndex) { this.hoverIndex = approx; haptic(6); }
+    }, { passive: false });
+
+    this.wrapper.addEventListener('touchend', () => {
+      this.isDragging = false;
+      this.track.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      const delta = this.lastTouchY - this.touchStartY;
+      const speed = Math.abs(this.velocity);
+      const momentumFactor = speed > 1.5 ? 400 : speed > 0.8 ? 250 : 150;
+      const momentum = this.velocity * momentumFactor;
+      const totalDelta = delta + momentum;
+      const indexDelta = Math.round(-totalDelta / ITEM_HEIGHT);
+      this.setIndex(this.currentIndex + indexDelta);
+    });
+
+    this.wrapper.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.setIndex(this.currentIndex + (e.deltaY > 0 ? 1 : -1));
+    }, { passive: false });
+  }
+}
+
+// Build the three query rolls once (after meta first loads), else refresh.
+function buildOrRefreshQueryRolls() {
+  if (!qbLabelRoll) {
+    qbLabelRoll = new QueryRoll('qbLabelsRoll', qbLabelItems);
+    qbAccountRoll = new QueryRoll('qbAccountsRoll', qbAccountItems);
+    qbDetailsRoll = new QueryRoll('qbDetailsRoll', qbDetailItems);
+    // Changing the Label re-scopes the Details roll and resets it to (All).
+    qbLabelRoll.onChange = () => { qbDetailsRoll.currentIndex = 0; qbDetailsRoll.refresh(); };
+  } else {
+    qbLabelRoll.refresh();
+    qbAccountRoll.refresh();
+    qbDetailsRoll.refresh();
+  }
+}
 
 function loadSavedQueries() {
   try { const a = JSON.parse(localStorage.getItem(QUERIES_STORAGE_KEY)); return Array.isArray(a) ? a : []; }
@@ -1333,35 +1493,22 @@ function renderChips(containerId, values, selSet) {
   });
 }
 
-// Details can be a long list, so its chips are filtered by a search box.
-function renderDetailChips() {
-  const term = (document.getElementById('qbDetailsSearch').value || '').trim().toUpperCase();
-  const all = qbMeta ? qbMeta.details : [];
-  const vals = term ? all.filter(v => v.toUpperCase().indexOf(term) !== -1) : all;
-  renderChips('qbDetails', vals, qbSel.details);
-}
+// (Details is now a label-dependent roll picker; see qbDetailItems / QueryRoll.)
 
 async function loadQueryMeta() {
-  document.getElementById('qbLabels').innerHTML = '<div class="spinner"></div>';
   try {
     const res = await apiCall({ action: 'queryMeta' });
     if (!res.success) {
       showToast(res.error || 'Query setup failed');
-      document.getElementById('qbLabels').innerHTML =
-        '<span class="qb-summary">' + escapeHtml(res.error || 'Error') + '</span>';
       return;
     }
     qbMeta = res;
-    renderChips('qbLabels', res.labels, qbSel.labels);
-    renderChips('qbAccounts', res.accounts, qbSel.accounts);
+    buildOrRefreshQueryRolls();
     renderChips('qbTypes', res.types, qbSel.types);
     renderChips('qbCategories', res.categories, qbSel.categories);
-    renderDetailChips();
     if (!document.getElementById('qbFrom').value) setQbPreset('thisYear');
   } catch (e) {
     showToast('Network error');
-    document.getElementById('qbLabels').innerHTML =
-      '<span class="qb-summary">Network error</span>';
   }
 }
 
@@ -1407,11 +1554,8 @@ function renderSavedQueries() {
 function applySavedQuery(q) {
   qbSign = q.sign || 'all';
   document.querySelectorAll('#qbSign .qb-chip').forEach(x => x.classList.toggle('on', x.dataset.sign === qbSign));
-  qbSel.labels = new Set(q.labels || []);
-  qbSel.accounts = new Set(q.accounts || []);
   qbSel.types = new Set(q.types || []);
   qbSel.categories = new Set(q.categories || []);
-  qbSel.details = new Set(q.details || []);
   if (q.datePreset) {
     qbActivePreset = q.datePreset;
     setQbPreset(q.datePreset);
@@ -1423,11 +1567,12 @@ function applySavedQuery(q) {
   document.getElementById('qbGroupBy').value = q.groupBy || 'month';
   document.getElementById('qbMetric').value = q.metric || 'sum';
   if (qbMeta) {
-    renderChips('qbLabels', qbMeta.labels, qbSel.labels);
-    renderChips('qbAccounts', qbMeta.accounts, qbSel.accounts);
+    // labels/accounts/details are single-select rolls (stored as 1-item arrays)
+    if (qbLabelRoll) qbLabelRoll.setValue((q.labels && q.labels[0]) || '');
+    if (qbAccountRoll) qbAccountRoll.setValue((q.accounts && q.accounts[0]) || '');
+    if (qbDetailsRoll) { qbDetailsRoll.refresh(); qbDetailsRoll.setValue((q.details && q.details[0]) || ''); }
     renderChips('qbTypes', qbMeta.types, qbSel.types);
     renderChips('qbCategories', qbMeta.categories, qbSel.categories);
-    renderDetailChips();
   }
   runQuery();
 }
@@ -1441,11 +1586,11 @@ function saveCurrentQuery() {
     dateFrom: document.getElementById('qbFrom').value || '',
     dateTo: document.getElementById('qbTo').value || '',
     sign: qbSign,
-    labels: [...qbSel.labels],
-    accounts: [...qbSel.accounts],
+    labels: qbLabelRoll && qbLabelRoll.getValue() ? [qbLabelRoll.getValue()] : [],
+    accounts: qbAccountRoll && qbAccountRoll.getValue() ? [qbAccountRoll.getValue()] : [],
     types: [...qbSel.types],
     categories: [...qbSel.categories],
-    details: [...qbSel.details],
+    details: qbDetailsRoll && qbDetailsRoll.getValue() ? [qbDetailsRoll.getValue()] : [],
     groupBy: document.getElementById('qbGroupBy').value,
     metric: document.getElementById('qbMetric').value
   };
@@ -1463,11 +1608,11 @@ async function runQuery() {
     dateFrom: document.getElementById('qbFrom').value || null,
     dateTo: document.getElementById('qbTo').value || null,
     sign: qbSign,
-    labels: [...qbSel.labels],
-    accounts: [...qbSel.accounts],
+    labels: qbLabelRoll && qbLabelRoll.getValue() ? [qbLabelRoll.getValue()] : [],
+    accounts: qbAccountRoll && qbAccountRoll.getValue() ? [qbAccountRoll.getValue()] : [],
     types: [...qbSel.types],
     categories: [...qbSel.categories],
-    details: [...qbSel.details]
+    details: qbDetailsRoll && qbDetailsRoll.getValue() ? [qbDetailsRoll.getValue()] : []
   };
   const groupBy = document.getElementById('qbGroupBy').value;
   const metric = document.getElementById('qbMetric').value;
@@ -1554,17 +1699,14 @@ document.getElementById('qbSign').addEventListener('click', (e) => {
   document.querySelectorAll('#qbSign .qb-chip').forEach(x => x.classList.toggle('on', x === b));
 });
 document.getElementById('qbClearLabels').addEventListener('click', () => {
-  qbSel.labels.clear();
-  renderChips('qbLabels', qbMeta ? qbMeta.labels : [], qbSel.labels);
+  if (qbLabelRoll) qbLabelRoll.setValue('');
+  if (qbDetailsRoll) { qbDetailsRoll.currentIndex = 0; qbDetailsRoll.refresh(); }
 });
 document.getElementById('qbClearDetails').addEventListener('click', () => {
-  qbSel.details.clear();
-  renderDetailChips();
+  if (qbDetailsRoll) qbDetailsRoll.setValue('');
 });
-document.getElementById('qbDetailsSearch').addEventListener('input', renderDetailChips);
 document.getElementById('qbClearAccounts').addEventListener('click', () => {
-  qbSel.accounts.clear();
-  renderChips('qbAccounts', qbMeta ? qbMeta.accounts : [], qbSel.accounts);
+  if (qbAccountRoll) qbAccountRoll.setValue('');
 });
 document.getElementById('qbClearTypes').addEventListener('click', () => {
   qbSel.types.clear();
