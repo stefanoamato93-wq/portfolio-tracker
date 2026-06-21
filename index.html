@@ -265,6 +265,8 @@ body {
   background: none; border: none; color: var(--primary);
   font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 4px;
 }
+.qb-title-btns { display: flex; gap: 4px; align-items: center; }
+.qb-sel { margin-top: 8px; }
 .qb-dates { display: flex; gap: 8px; }
 .qb-dates input {
   flex: 1; padding: 9px 10px; border: 1px solid var(--border);
@@ -285,6 +287,7 @@ body {
   background: #fff; color: var(--primary); font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .qb-preset:active { opacity: 0.6; }
+.qb-preset.on { background: var(--primary); color: #fff; }
 .qb-selects { display: flex; gap: 8px; }
 .qb-selects > div { flex: 1; }
 .qb-selects label {
@@ -338,7 +341,7 @@ body {
     <button id="btnQueryToggle" class="toggle-btn" title="Query database">🔎</button>
     <button id="btnRecent">History</button>
   </div>
-  <h1>Expense Tracker v24</h1>
+  <h1>Expense Tracker v26</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -469,6 +472,9 @@ body {
       <div class="qb-presets" id="qbPresets" style="margin-top:8px;">
         <button class="qb-preset" data-preset="thisMonth">This month</button>
         <button class="qb-preset" data-preset="lastMonth">Last month</button>
+        <button class="qb-preset" data-preset="thisMonthLY" title="Same month, last year">This mo. LY</button>
+        <button class="qb-preset" data-preset="ytd" title="Year to date (this year)">YTD</button>
+        <button class="qb-preset" data-preset="ytdLY" title="Year to date, last year (Jan 1 to same day LY)">YTD LY</button>
         <button class="qb-preset" data-preset="thisYear">This year</button>
         <button class="qb-preset" data-preset="last12">Last 12 mo</button>
         <button class="qb-preset" data-preset="all">All time</button>
@@ -487,34 +493,46 @@ body {
     <div class="qb-section">
       <div class="qb-section-title">
         <span>Label</span>
-        <button id="qbClearLabels">Clear</button>
+        <span class="qb-title-btns">
+          <button id="qbAddLabel">+ Add</button>
+          <button id="qbClearLabels">Clear</button>
+        </span>
       </div>
       <div class="text-roll-wrapper" id="qbLabelsRoll">
         <div class="text-roll-highlight"></div>
         <div class="text-roll-track"><div class="spinner"></div></div>
       </div>
+      <div class="qb-chips qb-sel hidden" id="qbLabelsSel"></div>
     </div>
 
     <div class="qb-section">
       <div class="qb-section-title">
         <span>Details</span>
-        <button id="qbClearDetails">Clear</button>
+        <span class="qb-title-btns">
+          <button id="qbAddDetail">+ Add</button>
+          <button id="qbClearDetails">Clear</button>
+        </span>
       </div>
       <div class="text-roll-wrapper" id="qbDetailsRoll">
         <div class="text-roll-highlight"></div>
         <div class="text-roll-track"></div>
       </div>
+      <div class="qb-chips qb-sel hidden" id="qbDetailsSel"></div>
     </div>
 
     <div class="qb-section">
       <div class="qb-section-title">
         <span>Account</span>
-        <button id="qbClearAccounts">Clear</button>
+        <span class="qb-title-btns">
+          <button id="qbAddAccount">+ Add</button>
+          <button id="qbClearAccounts">Clear</button>
+        </span>
       </div>
       <div class="text-roll-wrapper" id="qbAccountsRoll">
         <div class="text-roll-highlight"></div>
         <div class="text-roll-track"></div>
       </div>
+      <div class="qb-chips qb-sel hidden" id="qbAccountsSel"></div>
     </div>
 
     <div class="qb-section">
@@ -1267,13 +1285,19 @@ document.getElementById('btnCancel').addEventListener('click', resetForm);
 // FULL-DATABASE QUERY VIEW
 // ============================================================
 let qbMeta = null;
-const qbSel = { types: new Set(), categories: new Set() };
+// Label / Details / Account are roll pickers with an "Add" button that collects
+// chosen values into these multi-select sets (rendered as removable chips).
+// Type and Category remain multi-select chips.
+const qbSel = {
+  labels: new Set(), accounts: new Set(), details: new Set(),
+  types: new Set(), categories: new Set()
+};
 let qbSign = 'all';
 let qbActivePreset = null; // remembered so saved queries stay relative (e.g. "this year")
 let qbRawData = null;
 const QUERIES_STORAGE_KEY = 'expenseTrackerQueries';
 
-// First option in every query roll. Selecting it means "no filter".
+// First option in every query roll. Selecting it means "don't add anything".
 const ALL_OPT = '(All)';
 
 // Roll instances for the query filters (built lazily once meta arrives).
@@ -1286,15 +1310,66 @@ function qbLabelItems() {
 function qbAccountItems() {
   return [ALL_OPT, ...((qbMeta && qbMeta.accounts) || [])];
 }
-// Details narrow to the selected Label when one is chosen (else all details).
+// Details narrow to the union of the selected Labels (else all details).
 function qbDetailItems() {
-  const lbl = qbLabelRoll ? qbLabelRoll.getValue() : '';
+  const labels = [...qbSel.labels];
   let det = (qbMeta && qbMeta.details) || [];
-  if (lbl && qbMeta && qbMeta.detailsByLabel) {
-    const mapped = qbMeta.detailsByLabel[String(lbl).toUpperCase()];
-    if (mapped) det = mapped;
+  if (labels.length && qbMeta && qbMeta.detailsByLabel) {
+    const seen = {};
+    labels.forEach(l => {
+      const arr = qbMeta.detailsByLabel[String(l).toUpperCase()];
+      if (arr) arr.forEach(d => { seen[d] = true; });
+    });
+    const union = Object.keys(seen).sort((a, b) => a.localeCompare(b));
+    if (union.length) det = union;
   }
   return [ALL_OPT, ...det];
+}
+
+// Re-scope the Details roll after the selected Labels change.
+function refreshQbDetails() {
+  if (qbDetailsRoll) { qbDetailsRoll.currentIndex = 0; qbDetailsRoll.refresh(); }
+}
+
+// Render the removable selected-value chips for a filter set.
+function renderSelChips(containerId, set, afterChange) {
+  const c = document.getElementById(containerId);
+  if (!c) return;
+  c.innerHTML = '';
+  if (!set.size) { c.classList.add('hidden'); return; }
+  c.classList.remove('hidden');
+  [...set].forEach(v => {
+    const chip = document.createElement('div');
+    chip.className = 'qb-saved-chip';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = v;
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '\u2715';
+    del.title = 'Remove';
+    del.addEventListener('click', () => {
+      set.delete(v);
+      renderSelChips(containerId, set, afterChange);
+      if (afterChange) afterChange();
+      haptic(12);
+    });
+    chip.appendChild(name);
+    chip.appendChild(del);
+    c.appendChild(chip);
+  });
+}
+
+// "Add" the roll's current value into a selection set.
+function qbAddFromRoll(roll, set, containerId, afterChange) {
+  if (!roll) return;
+  const v = roll.getValue();
+  if (!v) { showToast('Roll to a value first'); return; }
+  if (set.has(v)) { showToast('Already added'); return; }
+  set.add(v);
+  renderSelChips(containerId, set, afterChange);
+  if (afterChange) afterChange();
+  haptic(12);
 }
 
 // ============================================================
@@ -1416,13 +1491,15 @@ function buildOrRefreshQueryRolls() {
     qbLabelRoll = new QueryRoll('qbLabelsRoll', qbLabelItems);
     qbAccountRoll = new QueryRoll('qbAccountsRoll', qbAccountItems);
     qbDetailsRoll = new QueryRoll('qbDetailsRoll', qbDetailItems);
-    // Changing the Label re-scopes the Details roll and resets it to (All).
-    qbLabelRoll.onChange = () => { qbDetailsRoll.currentIndex = 0; qbDetailsRoll.refresh(); };
   } else {
     qbLabelRoll.refresh();
     qbAccountRoll.refresh();
     qbDetailsRoll.refresh();
   }
+  // Reflect any current selections as chips.
+  renderSelChips('qbLabelsSel', qbSel.labels, refreshQbDetails);
+  renderSelChips('qbAccountsSel', qbSel.accounts, null);
+  renderSelChips('qbDetailsSel', qbSel.details, null);
 }
 
 function loadSavedQueries() {
@@ -1450,28 +1527,51 @@ function ymd(d) {
     String(d.getDate()).padStart(2, '0');
 }
 
+function updatePresetHighlight() {
+  document.querySelectorAll('#qbPresets .qb-preset').forEach(b => {
+    b.classList.toggle('on', b.dataset.preset === qbActivePreset);
+  });
+}
+
 function setQbPreset(preset) {
   const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   let from = null, to = null;
   if (preset === 'thisMonth') {
-    from = new Date(now.getFullYear(), now.getMonth(), 1);
-    to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    from = new Date(y, m, 1);
+    to = new Date(y, m + 1, 0);
   } else if (preset === 'lastMonth') {
-    from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    to = new Date(now.getFullYear(), now.getMonth(), 0);
+    from = new Date(y, m - 1, 1);
+    to = new Date(y, m, 0);
+  } else if (preset === 'thisMonthLY') {
+    // Same calendar month, previous year
+    from = new Date(y - 1, m, 1);
+    to = new Date(y - 1, m + 1, 0);
   } else if (preset === 'thisYear') {
-    from = new Date(now.getFullYear(), 0, 1);
-    to = new Date(now.getFullYear(), 11, 31);
+    from = new Date(y, 0, 1);
+    to = new Date(y, 11, 31);
+  } else if (preset === 'ytd') {
+    // Jan 1 this year -> today
+    from = new Date(y, 0, 1);
+    to = now;
+  } else if (preset === 'ytdLY') {
+    // Jan 1 last year -> same day last year (for like-for-like YTD comparison)
+    from = new Date(y - 1, 0, 1);
+    to = new Date(y - 1, m, d);
   } else if (preset === 'last12') {
     to = now;
-    from = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    from = new Date(y, m - 11, 1);
   } else if (preset === 'all') {
     document.getElementById('qbFrom').value = (qbMeta && qbMeta.minDate) || '';
     document.getElementById('qbTo').value = (qbMeta && qbMeta.maxDate) || '';
+    qbActivePreset = preset;
+    updatePresetHighlight();
     return;
   }
   document.getElementById('qbFrom').value = from ? ymd(from) : '';
   document.getElementById('qbTo').value = to ? ymd(to) : '';
+  qbActivePreset = preset;
+  updatePresetHighlight();
 }
 
 function renderChips(containerId, values, selSet) {
@@ -1554,6 +1654,9 @@ function renderSavedQueries() {
 function applySavedQuery(q) {
   qbSign = q.sign || 'all';
   document.querySelectorAll('#qbSign .qb-chip').forEach(x => x.classList.toggle('on', x.dataset.sign === qbSign));
+  qbSel.labels = new Set(q.labels || []);
+  qbSel.accounts = new Set(q.accounts || []);
+  qbSel.details = new Set(q.details || []);
   qbSel.types = new Set(q.types || []);
   qbSel.categories = new Set(q.categories || []);
   if (q.datePreset) {
@@ -1563,14 +1666,15 @@ function applySavedQuery(q) {
     qbActivePreset = null;
     document.getElementById('qbFrom').value = q.dateFrom || '';
     document.getElementById('qbTo').value = q.dateTo || '';
+    updatePresetHighlight();
   }
   document.getElementById('qbGroupBy').value = q.groupBy || 'month';
   document.getElementById('qbMetric').value = q.metric || 'sum';
   if (qbMeta) {
-    // labels/accounts/details are single-select rolls (stored as 1-item arrays)
-    if (qbLabelRoll) qbLabelRoll.setValue((q.labels && q.labels[0]) || '');
-    if (qbAccountRoll) qbAccountRoll.setValue((q.accounts && q.accounts[0]) || '');
-    if (qbDetailsRoll) { qbDetailsRoll.refresh(); qbDetailsRoll.setValue((q.details && q.details[0]) || ''); }
+    refreshQbDetails(); // re-scope Details to the restored labels
+    renderSelChips('qbLabelsSel', qbSel.labels, refreshQbDetails);
+    renderSelChips('qbAccountsSel', qbSel.accounts, null);
+    renderSelChips('qbDetailsSel', qbSel.details, null);
     renderChips('qbTypes', qbMeta.types, qbSel.types);
     renderChips('qbCategories', qbMeta.categories, qbSel.categories);
   }
@@ -1586,11 +1690,11 @@ function saveCurrentQuery() {
     dateFrom: document.getElementById('qbFrom').value || '',
     dateTo: document.getElementById('qbTo').value || '',
     sign: qbSign,
-    labels: qbLabelRoll && qbLabelRoll.getValue() ? [qbLabelRoll.getValue()] : [],
-    accounts: qbAccountRoll && qbAccountRoll.getValue() ? [qbAccountRoll.getValue()] : [],
+    labels: [...qbSel.labels],
+    accounts: [...qbSel.accounts],
     types: [...qbSel.types],
     categories: [...qbSel.categories],
-    details: qbDetailsRoll && qbDetailsRoll.getValue() ? [qbDetailsRoll.getValue()] : [],
+    details: [...qbSel.details],
     groupBy: document.getElementById('qbGroupBy').value,
     metric: document.getElementById('qbMetric').value
   };
@@ -1608,11 +1712,11 @@ async function runQuery() {
     dateFrom: document.getElementById('qbFrom').value || null,
     dateTo: document.getElementById('qbTo').value || null,
     sign: qbSign,
-    labels: qbLabelRoll && qbLabelRoll.getValue() ? [qbLabelRoll.getValue()] : [],
-    accounts: qbAccountRoll && qbAccountRoll.getValue() ? [qbAccountRoll.getValue()] : [],
+    labels: [...qbSel.labels],
+    accounts: [...qbSel.accounts],
     types: [...qbSel.types],
     categories: [...qbSel.categories],
-    details: qbDetailsRoll && qbDetailsRoll.getValue() ? [qbDetailsRoll.getValue()] : []
+    details: [...qbSel.details]
   };
   const groupBy = document.getElementById('qbGroupBy').value;
   const metric = document.getElementById('qbMetric').value;
@@ -1687,10 +1791,10 @@ document.getElementById('qbBack').addEventListener('click', () => { resetForm();
 document.getElementById('qbRun').addEventListener('click', runQuery);
 document.getElementById('qbPresets').addEventListener('click', (e) => {
   const b = e.target.closest('[data-preset]');
-  if (b) { qbActivePreset = b.dataset.preset; setQbPreset(b.dataset.preset); }
+  if (b) setQbPreset(b.dataset.preset);
 });
-document.getElementById('qbFrom').addEventListener('input', () => { qbActivePreset = null; });
-document.getElementById('qbTo').addEventListener('input', () => { qbActivePreset = null; });
+document.getElementById('qbFrom').addEventListener('input', () => { qbActivePreset = null; updatePresetHighlight(); });
+document.getElementById('qbTo').addEventListener('input', () => { qbActivePreset = null; updatePresetHighlight(); });
 document.getElementById('qbSave').addEventListener('click', saveCurrentQuery);
 document.getElementById('qbSign').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sign]');
@@ -1698,15 +1802,27 @@ document.getElementById('qbSign').addEventListener('click', (e) => {
   qbSign = b.dataset.sign;
   document.querySelectorAll('#qbSign .qb-chip').forEach(x => x.classList.toggle('on', x === b));
 });
+document.getElementById('qbAddLabel').addEventListener('click', () => {
+  qbAddFromRoll(qbLabelRoll, qbSel.labels, 'qbLabelsSel', refreshQbDetails);
+});
+document.getElementById('qbAddDetail').addEventListener('click', () => {
+  qbAddFromRoll(qbDetailsRoll, qbSel.details, 'qbDetailsSel', null);
+});
+document.getElementById('qbAddAccount').addEventListener('click', () => {
+  qbAddFromRoll(qbAccountRoll, qbSel.accounts, 'qbAccountsSel', null);
+});
 document.getElementById('qbClearLabels').addEventListener('click', () => {
-  if (qbLabelRoll) qbLabelRoll.setValue('');
-  if (qbDetailsRoll) { qbDetailsRoll.currentIndex = 0; qbDetailsRoll.refresh(); }
+  qbSel.labels.clear();
+  renderSelChips('qbLabelsSel', qbSel.labels, refreshQbDetails);
+  refreshQbDetails();
 });
 document.getElementById('qbClearDetails').addEventListener('click', () => {
-  if (qbDetailsRoll) qbDetailsRoll.setValue('');
+  qbSel.details.clear();
+  renderSelChips('qbDetailsSel', qbSel.details, null);
 });
 document.getElementById('qbClearAccounts').addEventListener('click', () => {
-  if (qbAccountRoll) qbAccountRoll.setValue('');
+  qbSel.accounts.clear();
+  renderSelChips('qbAccountsSel', qbSel.accounts, null);
 });
 document.getElementById('qbClearTypes').addEventListener('click', () => {
   qbSel.types.clear();
