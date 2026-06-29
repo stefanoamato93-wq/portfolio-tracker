@@ -341,7 +341,7 @@ body {
     <button id="btnQueryToggle" class="toggle-btn" title="Query database">🔎</button>
     <button id="btnRecent">History</button>
   </div>
-  <h1>Expense Tracker v28</h1>
+  <h1>Expense Tracker v29</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -497,6 +497,11 @@ body {
     </div>
 
     <div id="qbFilterOptions" class="hidden">
+
+    <div class="qb-section" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+      <span class="qb-summary" style="margin:0;flex:1;">Filter lists are cached for speed.</span>
+      <button class="qb-preset" id="qbRefreshOptions" title="Re-scan the full database for newly added labels, accounts or categories">↻ Deep refresh</button>
+    </div>
 
     <div class="qb-section">
       <div class="qb-section-title">
@@ -1617,15 +1622,18 @@ function revealFilterOptions() {
 
 // Load the (slow) distinct filter values from the full DB. Runs only when the
 // user taps "Load filter options", or when a saved query needs them. Cached in
-// memory (qbMeta) so it never reloads within a session.
-async function loadQueryMeta() {
-  if (qbMeta) { revealFilterOptions(); return; }
+// memory (qbMeta) so it never reloads within a session. Pass force=true (Deep
+// refresh) to bypass both the in-memory and the server-side (1 week) caches.
+async function loadQueryMeta(force) {
+  if (qbMeta && !force) { revealFilterOptions(); return; }
   if (qbMetaLoading) return;
   qbMetaLoading = true;
   const btn = document.getElementById('qbLoadOptions');
+  const rbtn = document.getElementById('qbRefreshOptions');
   if (btn) { btn.disabled = true; btn.textContent = 'Loading filter options…'; }
+  if (rbtn) { rbtn.disabled = true; rbtn.textContent = 'Refreshing…'; }
   try {
-    const res = await apiCall({ action: 'queryMeta' });
+    const res = await apiCall({ action: 'queryMeta', forceRefresh: !!force });
     if (!res.success) {
       showToast(res.error || 'Query setup failed');
       return;
@@ -1635,11 +1643,13 @@ async function loadQueryMeta() {
     renderChips('qbTypes', res.types, qbSel.types);
     renderChips('qbCategories', res.categories, qbSel.categories);
     revealFilterOptions();
+    if (force) showToast(res.cached === false ? 'Filters refreshed' : 'Filters reloaded');
   } catch (e) {
     showToast('Network error');
   } finally {
     qbMetaLoading = false;
     if (btn) { btn.disabled = false; btn.textContent = '⚙︎ Load filter options (labels, accounts, categories…)'; }
+    if (rbtn) { rbtn.disabled = false; rbtn.textContent = '↻ Deep refresh'; }
   }
 }
 
@@ -1832,6 +1842,7 @@ document.getElementById('btnQueryToggle').addEventListener('click', () => {
 document.getElementById('qbBack').addEventListener('click', () => { resetForm(); showView('viewForm'); });
 document.getElementById('qbRun').addEventListener('click', runQuery);
 document.getElementById('qbLoadOptions').addEventListener('click', () => loadQueryMeta());
+document.getElementById('qbRefreshOptions').addEventListener('click', () => loadQueryMeta(true));
 document.getElementById('qbPresets').addEventListener('click', (e) => {
   const b = e.target.closest('[data-preset]');
   if (b) setQbPreset(b.dataset.preset);
