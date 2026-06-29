@@ -341,7 +341,7 @@ body {
     <button id="btnQueryToggle" class="toggle-btn" title="Query database">🔎</button>
     <button id="btnRecent">History</button>
   </div>
-  <h1>Expense Tracker v27</h1>
+  <h1>Expense Tracker v28</h1>
   <button id="btnNew">+ New</button>
 </div>
 
@@ -490,6 +490,14 @@ body {
       </div>
     </div>
 
+    <!-- Filter options (label/details/account/type/category) load on demand -->
+    <div class="qb-section" id="qbLoadOptionsWrap">
+      <button class="btn btn-secondary" id="qbLoadOptions" style="margin-top:0;">⚙︎ Load filter options (labels, accounts, categories…)</button>
+      <div class="qb-summary" style="margin-top:6px;">Label, details, account, type and category filters scan the full database, so they load only when you tap above. Date range, direction, group-by and metric work without them.</div>
+    </div>
+
+    <div id="qbFilterOptions" class="hidden">
+
     <div class="qb-section">
       <div class="qb-section-title">
         <span>Label</span>
@@ -550,6 +558,8 @@ body {
       </div>
       <div class="qb-chips" id="qbCategories"></div>
     </div>
+
+    </div><!-- /qbFilterOptions -->
 
     <div class="qb-section">
       <div class="qb-selects">
@@ -1595,7 +1605,25 @@ function renderChips(containerId, values, selSet) {
 
 // (Details is now a label-dependent roll picker; see qbDetailItems / QueryRoll.)
 
+let qbMetaLoading = false;
+
+// Reveal the on-demand filter sections and hide the "Load filter options" button.
+function revealFilterOptions() {
+  const opts = document.getElementById('qbFilterOptions');
+  if (opts) opts.classList.remove('hidden');
+  const wrap = document.getElementById('qbLoadOptionsWrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+
+// Load the (slow) distinct filter values from the full DB. Runs only when the
+// user taps "Load filter options", or when a saved query needs them. Cached in
+// memory (qbMeta) so it never reloads within a session.
 async function loadQueryMeta() {
+  if (qbMeta) { revealFilterOptions(); return; }
+  if (qbMetaLoading) return;
+  qbMetaLoading = true;
+  const btn = document.getElementById('qbLoadOptions');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading filter options…'; }
   try {
     const res = await apiCall({ action: 'queryMeta' });
     if (!res.success) {
@@ -1606,16 +1634,21 @@ async function loadQueryMeta() {
     buildOrRefreshQueryRolls();
     renderChips('qbTypes', res.types, qbSel.types);
     renderChips('qbCategories', res.categories, qbSel.categories);
-    if (!document.getElementById('qbFrom').value) setQbPreset('thisYear');
+    revealFilterOptions();
   } catch (e) {
     showToast('Network error');
+  } finally {
+    qbMetaLoading = false;
+    if (btn) { btn.disabled = false; btn.textContent = '⚙︎ Load filter options (labels, accounts, categories…)'; }
   }
 }
 
 function openQuery() {
   showView('viewQuery');
   renderSavedQueries();
-  if (!qbMeta) loadQueryMeta();
+  // Don't auto-load the heavy filter lists. Just set a sensible default range
+  // so "Run query" works immediately; the user loads filters only if needed.
+  if (!document.getElementById('qbFrom').value) setQbPreset('thisYear');
 }
 
 // ---- saved queries ----
@@ -1670,15 +1703,24 @@ function applySavedQuery(q) {
   }
   document.getElementById('qbGroupBy').value = q.groupBy || 'month';
   document.getElementById('qbMetric').value = q.metric || 'sum';
+  // Selected-value chips (label/account/details) don't need the meta lists.
+  renderSelChips('qbLabelsSel', qbSel.labels, refreshQbDetails);
+  renderSelChips('qbAccountsSel', qbSel.accounts, null);
+  renderSelChips('qbDetailsSel', qbSel.details, null);
+  const hasFilters = qbSel.labels.size || qbSel.accounts.size || qbSel.details.size ||
+                     qbSel.types.size || qbSel.categories.size;
   if (qbMeta) {
     refreshQbDetails(); // re-scope Details to the restored labels
-    renderSelChips('qbLabelsSel', qbSel.labels, refreshQbDetails);
-    renderSelChips('qbAccountsSel', qbSel.accounts, null);
-    renderSelChips('qbDetailsSel', qbSel.details, null);
     renderChips('qbTypes', qbMeta.types, qbSel.types);
     renderChips('qbCategories', qbMeta.categories, qbSel.categories);
+    revealFilterOptions();
+    runQuery();
+  } else if (hasFilters) {
+    // The query uses filters: load the option lists so they show, then run.
+    loadQueryMeta().then(runQuery);
+  } else {
+    runQuery();
   }
-  runQuery();
 }
 
 function saveCurrentQuery() {
@@ -1789,6 +1831,7 @@ document.getElementById('btnQueryToggle').addEventListener('click', () => {
 });
 document.getElementById('qbBack').addEventListener('click', () => { resetForm(); showView('viewForm'); });
 document.getElementById('qbRun').addEventListener('click', runQuery);
+document.getElementById('qbLoadOptions').addEventListener('click', () => loadQueryMeta());
 document.getElementById('qbPresets').addEventListener('click', (e) => {
   const b = e.target.closest('[data-preset]');
   if (b) setQbPreset(b.dataset.preset);
